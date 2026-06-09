@@ -108,6 +108,9 @@ class SettingsTab(QWidget):
 
         self.chk_auto_advance = QCheckBox("Auto-advance steps (replay sync)")
         overlay_form.addRow("", self.chk_auto_advance)
+
+        self.chk_auto_replay = QCheckBox("Prompt to import last replay after a new game")
+        overlay_form.addRow("", self.chk_auto_replay)
         layout.addWidget(overlay_group)
 
         # ── Hotkeys ───────────────────────────────────────────────────────
@@ -226,6 +229,7 @@ class SettingsTab(QWidget):
         self.slider_opacity.setValue(int(settings.overlay_opacity * 100))
         self.chk_show_timings.setChecked(settings.show_timings)
         self.chk_auto_advance.setChecked(settings.auto_advance)
+        self.chk_auto_replay.setChecked(settings.auto_prompt_new_replay)
         self.ed_hotkey_next.setText(settings.hotkey_next_step)
         self.ed_hotkey_prev.setText(settings.hotkey_prev_step)
         self.ed_hotkey_overlay.setText(settings.hotkey_toggle_overlay)
@@ -241,6 +245,7 @@ class SettingsTab(QWidget):
         settings.overlay_opacity = self.slider_opacity.value() / 100.0
         settings.show_timings   = self.chk_show_timings.isChecked()
         settings.auto_advance   = self.chk_auto_advance.isChecked()
+        settings.auto_prompt_new_replay = self.chk_auto_replay.isChecked()
         settings.hotkey_next_step      = self.ed_hotkey_next.text().strip()
         settings.hotkey_prev_step      = self.ed_hotkey_prev.text().strip()
         settings.hotkey_toggle_overlay = self.ed_hotkey_overlay.text().strip()

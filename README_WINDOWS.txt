@@ -16,10 +16,13 @@ STEP 2 — Every time you want to launch TRINKER:
   Double-click: TRINKER.bat
   (or use the Desktop shortcut created in Step 1)
 
-STEP 2b — Launch WITH automatic updates (recommended after GitHub setup):
-  Double-click: UPDATE_AND_RUN.bat
-  This pulls the latest code from GitHub, refreshes libraries if needed,
-  then starts TRINKER. One click — no coding required.
+STEP 2b — Launch WITH automatic updates (recommended):
+  Double-click: TRINKER.bat  (or UPDATE_AND_RUN.bat)
+  Pulls latest code from GitHub, refreshes libraries, then starts TRINKER.
+
+STEP 2c — Launch the standalone EXE with auto-update:
+  Double-click: UPDATE_EXE.bat
+  Checks GitHub Releases for a newer TRINKER.exe, downloads if needed, then opens.
 
 --------------------------------------------------
 REQUIREMENTS
@@ -72,6 +75,12 @@ BUILD STANDALONE EXE (OPTIONAL)
 To create a double-clickable TRINKER.exe (no Python needed after build):
   Double-click: BUILD_EXE.bat
   Output: dist\TRINKER.exe
+
+To publish an update others can download:
+  1. Bump the version number in VERSION
+  2. Run BUILD_EXE.bat
+  3. Create a GitHub Release and attach dist\TRINKER.exe
+  (Ask the AI assistant — it can do this for you.)
 
 --------------------------------------------------
 AI COACH (OPTIONAL)

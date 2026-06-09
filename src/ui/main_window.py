@@ -7,6 +7,8 @@ Wires all tabs and the overlay together with signals.
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
+
+from ..core.config import get_app_version
 from PySide6.QtGui import QFont, QIcon, QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
@@ -172,7 +174,10 @@ class TrinkerMainWindow(QMainWindow):
         self._setup_ui()
         self._setup_hotkeys()
 
-        logger.info("TRINKER main window initialized.")
+        # After startup, check if a new replay appeared from a recent game
+        QTimer.singleShot(2000, self.practice_tab.check_for_new_replay)
+
+        logger.info("TRINKER main window initialized (v%s).", get_app_version())
 
     # ── Theme ─────────────────────────────────────────────────────────────
 
@@ -354,6 +359,7 @@ class TrinkerMainWindow(QMainWindow):
             self.library_tab.refresh()
         elif index == 1: # Practice
             self.practice_tab.refresh_build_orders()
+            self.practice_tab.check_for_new_replay()
         elif index == 2: # Analytics
             self.analytics_tab.refresh()
 

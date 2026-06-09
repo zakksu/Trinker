@@ -335,14 +335,17 @@ class PracticeTab(QWidget):
         replay_layout.addWidget(self.lbl_replay_info)
 
         replay_btn_row = QHBoxLayout()
-        btn_browse_replay = QPushButton("Browse Replay…")
+        self.btn_import_last = QPushButton("Import Last Game")
+        self.btn_import_last.setStyleSheet(
+            "QPushButton { background: #1c3a5c; color: #3498db; border: 1px solid #2c5a8c; }"
+        )
+        self.btn_import_last.clicked.connect(self.import_last_replay)
+        btn_browse_replay = QPushButton("Browse…")
         btn_browse_replay.clicked.connect(self._on_browse_replay)
-        btn_find_replays = QPushButton("Find Recent")
-        btn_find_replays.clicked.connect(self._on_find_recent_replays)
         btn_clear_replay = QPushButton("Clear")
         btn_clear_replay.clicked.connect(self._on_clear_replay)
+        replay_btn_row.addWidget(self.btn_import_last)
         replay_btn_row.addWidget(btn_browse_replay)
-        replay_btn_row.addWidget(btn_find_replays)
         replay_btn_row.addWidget(btn_clear_replay)
         replay_layout.addLayout(replay_btn_row)
         left.addWidget(replay_group)
@@ -503,30 +506,99 @@ class PracticeTab(QWidget):
         if path:
             self._load_replay(path)
 
-    def _on_find_recent_replays(self) -> None:
-        from ..replay.parser import find_replay_files
-        replays = find_replay_files()
-        if not replays:
-            QMessageBox.information(
-                self, "No Replays Found",
-                "No .aoe2record files found in your default AoE2 DE folders.\n\n"
-                "Use Browse Replay to pick a file manually."
-            )
-            return
-        self._load_replay(str(replays[0]))
+    def import_last_replay(self, *, silent: bool = False) -> bool:
+        """Load the newest .aoe2record from the AoE2 replays folder."""
+        from ..replay.parser import get_latest_replay
+        latest = get_latest_replay()
+        if not latest:
+            if not silent:
+                QMessageBox.information(
+                    self, "No Replays Found",
+                    "No .aoe2record files found in your AoE2 replays folder.\n\n"
+                    f"Expected location:\n{Path.home() / 'Documents' / 'My Games' / 'Age of Empires 2 DE'}"
+                )
+            return False
+        self._load_replay(str(latest), mark_seen=True)
+        return True
 
-    def _load_replay(self, path: str) -> None:
-        from ..replay.parser import parse_replay
+    def check_for_new_replay(self) -> None:
+        """
+        Prompt to import when a newer replay appears (e.g. after a finished game).
+        Called on app startup and when switching to the Practice tab.
+        """
+        if not settings.auto_prompt_new_replay:
+            return
+
+        from ..replay.parser import get_latest_replay
+        latest = get_latest_replay()
+        if not latest:
+            return
+
+        mtime = latest.stat().st_mtime
+        if mtime <= settings.last_seen_replay_mtime:
+            return
+        if str(latest) == settings.last_seen_replay_path and self._replay_path:
+            return
+
+        reply = QMessageBox.question(
+            self, "New Game Detected",
+            f"A new replay was found from your last game:\n\n"
+            f"{latest.name}\n\n"
+            "Import it into this practice session?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._load_replay(str(latest), mark_seen=True)
+            self._suggest_build_for_civ()
+        else:
+            settings.last_seen_replay_mtime = mtime
+            settings.last_seen_replay_path = str(latest)
+            settings.save()
+
+    def _suggest_build_for_civ(self) -> None:
+        """If replay civ matches a library build, offer to select it."""
+        if not self._replay_info:
+            return
+        civ = self._replay_info.primary_civ()
+        if not civ or civ == "Unknown":
+            return
+
+        bos = get_all_build_orders()
+        matches = [b for b in bos if b.civ.lower() == civ.lower() or b.civ == "Any"]
+        if not matches:
+            return
+
+        best = next((b for b in matches if b.civ.lower() == civ.lower()), matches[0])
+        if self._selected_bo and self._selected_bo.id == best.id:
+            return
+
+        reply = QMessageBox.question(
+            self, "Match Build Order?",
+            f"Replay civ: {civ}\n\nLoad '{best.name}' for this review?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.load_build_order(best)
+
+    def _load_replay(self, path: str, *, mark_seen: bool = True) -> None:
+        from ..replay.parser import parse_replay, format_replay_duration
         info = parse_replay(path)
         self._replay_path = path
         self._replay_info = info
 
+        if mark_seen:
+            try:
+                settings.last_seen_replay_mtime = Path(path).stat().st_mtime
+                settings.last_seen_replay_path = path
+                settings.save()
+            except OSError:
+                pass
+
         civ = info.primary_civ()
-        duration = _sec_to_mmss(info.duration_sec)
-        warnings = f"\nWarnings: {len(info.parse_errors)}" if info.parse_errors else ""
+        duration = format_replay_duration(info.duration_sec)
         self.lbl_replay_info.setText(
             f"{Path(path).name}\n"
-            f"Map: {info.map_name} | Civ: {civ} | ~{duration}{warnings}"
+            f"Map: {info.map_name} | Civ: {civ} | ~{duration}"
         )
         logger.info("Replay loaded for practice: %s", path)
 

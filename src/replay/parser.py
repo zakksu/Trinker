@@ -217,6 +217,28 @@ def parse_replay(path: str | Path) -> ReplayInfo:
     return ReplayParser(path).parse()
 
 
+def format_replay_duration(sec: int) -> str:
+    """
+    Human-readable duration for UI display.
+    File-size estimates are unreliable for multiplayer replays — cap sanity.
+    """
+    if sec <= 0:
+        return "unknown"
+    if sec > 7200:
+        return "long game (watch in AoE2)"
+    m, s = divmod(sec, 60)
+    if m >= 60:
+        h, m = divmod(m, 60)
+        return f"{h}h {m}m"
+    return f"{m}:{s:02d}"
+
+
+def get_latest_replay() -> Optional[Path]:
+    """Return the newest .aoe2record file, or None."""
+    replays = find_replay_files()
+    return replays[0] if replays else None
+
+
 def find_replay_files() -> list[Path]:
     """
     Search default AoE2 DE replay directories for .aoe2record files.
@@ -228,8 +250,9 @@ def find_replay_files() -> list[Path]:
     for base in AO2_REPLAY_DIRS:
         if base.exists():
             found.extend(base.rglob("*.aoe2record"))
-            logger.info("Found %d replays in %s", len(found), base)
 
     # Sort by modification time descending (newest first)
     found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    if found:
+        logger.debug("Found %d replay files (newest: %s)", len(found), found[0].name)
     return found

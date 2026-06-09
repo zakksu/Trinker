@@ -25,6 +25,7 @@ from PySide6.QtCore import Qt
 
 from src.core.logger import logger
 from src.core.database import init_db
+from src.core.config import settings
 
 
 def _configure_app(app: QApplication) -> None:
@@ -106,7 +107,24 @@ def main() -> int:
     window.show()
     window.raise_()
 
+    _maybe_enable_ollama_coach()
+
     logger.info("Main window shown. Entering Qt event loop.")
+
+
+def _maybe_enable_ollama_coach() -> None:
+    """If Ollama is running and AI coach is off, enable it once automatically."""
+    if settings.ai_coach_enabled:
+        return
+    try:
+        import requests
+        resp = requests.get(f"{settings.ollama_url}/api/tags", timeout=2)
+        if resp.status_code == 200:
+            settings.ai_coach_enabled = True
+            settings.save()
+            logger.info("Ollama detected — AI Coach enabled automatically.")
+    except Exception:
+        pass
 
     # Step 4: Run the Qt event loop
     exit_code = app.exec()

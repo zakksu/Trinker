@@ -92,6 +92,18 @@ REQUEST_HEADERS = {
 # ---------------------------------------------------------------------------
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
+VERSION_FILE  = Path(__file__).resolve().parent.parent.parent / "VERSION"
+GITHUB_REPO   = "zakksu/Trinker"
+
+
+def get_app_version() -> str:
+    """Read the app version from the VERSION file at project root."""
+    try:
+        if VERSION_FILE.exists():
+            return VERSION_FILE.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return "1.0.0"
 
 @dataclass
 class AppSettings:
@@ -114,6 +126,9 @@ class AppSettings:
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
     telemetry_opt_in: bool = False
+    auto_prompt_new_replay: bool = True    # ask to import after a new game
+    last_seen_replay_mtime: float = 0.0    # tracks newest replay we've seen
+    last_seen_replay_path: str = ""        # path of last acknowledged replay
 
     def save(self) -> None:
         """Persist settings to disk."""
