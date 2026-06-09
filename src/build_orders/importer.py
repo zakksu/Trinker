@@ -1,0 +1,392 @@
+"""
+TRINKER - Build Order Importer
+Handles fetching and parsing build orders from external sources:
+  - buildorderguide.com (URL paste → auto-fetch)
+  - JSON files (TRINKER native + generic)
+  - Plain .txt files (legacy RTS_Overlay format)
+
+Each importer returns a BuildOrder dataclass on success, raises on failure.
+"""
+
+import json
+import re
+import time
+from pathlib import Path
+from typing import Optional
+from urllib.parse import urlparse
+
+import requests
+from bs4 import BeautifulSoup
+
+from .models import BuildOrder, BuildStep
+from ..core.config import (
+    BUILDORDERGUIDE_BASE, REQUEST_TIMEOUT, REQUEST_HEADERS, CACHE_DIR
+)
+from ..core.logger import logger
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _mmss_to_sec(time_str: str) -> int:
+    """
+    Convert 'M:SS' or 'MM:SS' string to total seconds.
+    Returns 0 if parsing fails.
+    """
+    try:
+        parts = time_str.strip().split(":")
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        if len(parts) == 1:
+            return int(parts[0])
+    except Exception:
+        pass
+    return 0
+
+
+def _get(url: str, *, cache_key: Optional[str] = None) -> str:
+    """
+    Perform a GET request with optional caching.
+    Cached HTML is stored in CACHE_DIR for offline use.
+    """
+    if cache_key:
+        cache_path = CACHE_DIR / f"{cache_key}.html"
+        if cache_path.exists():
+            age = time.time() - cache_path.stat().st_mtime
+            if age < 86400:  # 24-hour cache
+                logger.debug("Cache hit: %s", cache_key)
+                return cache_path.read_text(encoding="utf-8")
+
+    logger.info("Fetching: %s", url)
+    resp = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    html = resp.text
+
+    if cache_key:
+        cache_path = CACHE_DIR / f"{cache_key}.html"
+        cache_path.write_text(html, encoding="utf-8")
+
+    return html
+
+
+# ---------------------------------------------------------------------------
+# buildorderguide.com importer
+# ---------------------------------------------------------------------------
+
+def import_from_buildorderguide(url: str) -> BuildOrder:
+    """
+    Fetch and parse a build order from buildorderguide.com.
+
+    Supported URL patterns:
+      https://www.buildorderguide.com/builds/<slug>
+      https://buildorderguide.com/builds/<slug>
+
+    Args:
+        url: Full URL to the build order page.
+
+    Returns:
+        Parsed BuildOrder instance.
+
+    Raises:
+        ValueError: If the URL is not a valid buildorderguide.com build URL.
+        requests.HTTPError: If the page cannot be fetched.
+        RuntimeError: If parsing fails (page structure changed).
+    """
+    parsed = urlparse(url)
+    if "buildorderguide.com" not in parsed.netloc:
+        raise ValueError(f"Not a buildorderguide.com URL: {url}")
+
+    # Extract slug for cache key
+    path_parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if len(path_parts) < 2 or path_parts[0] != "builds":
+        raise ValueError(
+            f"Expected URL like https://www.buildorderguide.com/builds/<slug>, got: {url}"
+        )
+    slug = path_parts[1]
+
+    html = _get(url, cache_key=f"bog_{slug}")
+    soup = BeautifulSoup(html, "html.parser")
+
+    # ── Metadata ──────────────────────────────────────────────────────────────
+    name = _extract_text(soup, "h1") or slug
+    civ  = _extract_meta_or_tag(soup, "civ") or "Any"
+
+    # Strategy / description lives in various meta containers depending on page version
+    strategy = ""
+    notes    = ""
+    desc_el  = soup.find(class_=re.compile(r"description|overview|intro", re.I))
+    if desc_el:
+        notes = desc_el.get_text(separator=" ", strip=True)
+
+    # Try to extract author
+    author = ""
+    author_el = soup.find(class_=re.compile(r"author|creator|submitted", re.I))
+    if author_el:
+        author = author_el.get_text(strip=True)
+
+    # ── Steps ─────────────────────────────────────────────────────────────────
+    steps = _parse_bog_steps(soup)
+    if not steps:
+        # Fallback: try generic table/list parsing
+        steps = _parse_generic_steps(soup)
+
+    if not steps:
+        raise RuntimeError(
+            "Could not parse build steps from buildorderguide.com — "
+            "the page structure may have changed. Try the manual editor."
+        )
+
+    bo = BuildOrder(
+        name=name,
+        civ=civ,
+        strategy=strategy or _infer_strategy(name),
+        author=author,
+        source_url=url,
+        external_id=slug,
+        steps=steps,
+        notes=notes,
+        tags=_infer_tags(name, civ, strategy),
+    )
+    logger.info("Imported '%s' (%d steps) from buildorderguide.com", bo.name, len(bo.steps))
+    return bo
+
+
+def _extract_text(soup: BeautifulSoup, selector: str) -> str:
+    el = soup.find(selector)
+    return el.get_text(strip=True) if el else ""
+
+
+def _extract_meta_or_tag(soup: BeautifulSoup, keyword: str) -> str:
+    # Try data attributes first
+    el = soup.find(attrs={f"data-{keyword}": True})
+    if el:
+        return el[f"data-{keyword}"]
+    # Try class-based containers
+    el = soup.find(class_=re.compile(keyword, re.I))
+    return el.get_text(strip=True) if el else ""
+
+
+def _parse_bog_steps(soup: BeautifulSoup) -> list[BuildStep]:
+    """
+    Parse steps from the standard buildorderguide.com step table/list structure.
+    The site uses a React frontend; steps are serialized in a <script id="__NEXT_DATA__">.
+    """
+    steps: list[BuildStep] = []
+
+    # Try Next.js data blob first (most reliable)
+    next_data_tag = soup.find("script", id="__NEXT_DATA__")
+    if next_data_tag:
+        try:
+            data = json.loads(next_data_tag.string)
+            # Navigate the Next.js page props to find the build order data
+            props = data.get("props", {}).get("pageProps", {})
+            build = props.get("build") or props.get("buildOrder") or {}
+            raw_steps = build.get("steps") or build.get("buildSteps") or []
+            for i, s in enumerate(raw_steps, start=1):
+                step = BuildStep(
+                    index=i,
+                    description=s.get("description") or s.get("text") or s.get("action") or "",
+                    time_str=str(s.get("time") or s.get("gameTime") or ""),
+                    population=int(s.get("population") or s.get("pop") or 0),
+                    food=_int_or_none(s.get("food")),
+                    wood=_int_or_none(s.get("wood")),
+                    gold=_int_or_none(s.get("gold")),
+                    stone=_int_or_none(s.get("stone")),
+                    notes=s.get("notes") or s.get("hint") or "",
+                    age=s.get("age"),
+                )
+                step.time_sec = _mmss_to_sec(step.time_str)
+                steps.append(step)
+            if steps:
+                return steps
+        except Exception as exc:
+            logger.debug("Next.js data parse failed: %s", exc)
+
+    # Fallback: HTML table rows
+    table = soup.find("table")
+    if table:
+        rows = table.find_all("tr")[1:]  # skip header
+        for i, row in enumerate(rows, start=1):
+            cells = row.find_all(["td", "th"])
+            if len(cells) < 2:
+                continue
+            texts = [c.get_text(strip=True) for c in cells]
+            step = BuildStep(index=i, description=texts[-1])
+            if len(texts) >= 3:
+                step.time_str = texts[0]
+                step.time_sec = _mmss_to_sec(texts[0])
+                step.population = _safe_int(texts[1])
+            steps.append(step)
+
+    return steps
+
+
+def _parse_generic_steps(soup: BeautifulSoup) -> list[BuildStep]:
+    """Last-resort: extract step-like list items from any ordered/unordered list."""
+    steps = []
+    lists = soup.find_all(["ol", "ul"])
+    best_list = max(lists, key=lambda l: len(l.find_all("li")), default=None)
+    if best_list:
+        for i, li in enumerate(best_list.find_all("li"), start=1):
+            text = li.get_text(strip=True)
+            if len(text) > 5:
+                steps.append(BuildStep(index=i, description=text))
+    return steps
+
+
+def _infer_strategy(name: str) -> str:
+    name_l = name.lower()
+    if "fast castle" in name_l or "fc" in name_l:
+        return "Fast Castle"
+    if "scout" in name_l:
+        return "Scout Rush"
+    if "archer" in name_l:
+        return "Archer Rush"
+    if "drush" in name_l:
+        return "Drush"
+    if "boom" in name_l:
+        return "Boom"
+    if "fast imp" in name_l or "fi " in name_l:
+        return "Fast Imperial"
+    return "Custom"
+
+
+def _infer_tags(name: str, civ: str, strategy: str) -> list[str]:
+    tags = []
+    name_l = (name + " " + strategy).lower()
+    for kw in ["rush", "castle", "boom", "knight", "archer", "scout", "drush", "monk", "siege"]:
+        if kw in name_l:
+            tags.append(kw)
+    if civ and civ.lower() not in ("any", ""):
+        tags.append(civ.lower())
+    return list(set(tags))
+
+
+def _int_or_none(v) -> Optional[int]:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_int(s: str, default: int = 0) -> int:
+    try:
+        return int(re.sub(r"[^\d]", "", s))
+    except (TypeError, ValueError):
+        return default
+
+
+# ---------------------------------------------------------------------------
+# JSON importer (TRINKER native format)
+# ---------------------------------------------------------------------------
+
+def import_from_json_file(path: str | Path) -> BuildOrder:
+    """
+    Load a build order from a JSON file.
+    Supports TRINKER's native format and a generic {name, steps} dict.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    # Handle list of steps at top level (bare steps format)
+    if isinstance(data, list):
+        data = {"name": path.stem, "steps": data}
+
+    steps_raw = data.pop("steps", [])
+    steps = []
+    for i, s in enumerate(steps_raw, start=1):
+        if isinstance(s, str):
+            steps.append(BuildStep(index=i, description=s))
+        else:
+            step = BuildStep.from_dict({"index": i, **s})
+            step.time_sec = step.time_sec or _mmss_to_sec(step.time_str)
+            steps.append(step)
+
+    bo = BuildOrder.from_dict({**data, "steps": []})
+    bo.steps = steps
+    bo.source_url = bo.source_url or str(path)
+    logger.info("Loaded '%s' from JSON (%d steps)", bo.name, len(bo.steps))
+    return bo
+
+
+# ---------------------------------------------------------------------------
+# Plain-text importer (legacy RTS_Overlay .txt format)
+# ---------------------------------------------------------------------------
+
+def import_from_txt_file(path: str | Path) -> BuildOrder:
+    """
+    Parse a plain-text build order file (one step per line).
+    Lines starting with '#' are treated as comments / metadata.
+    Format loosely: [TIME] [POP] Description
+    """
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    name = path.stem
+    steps: list[BuildStep] = []
+    civ = "Any"
+    strategy = ""
+    notes_lines: list[str] = []
+
+    step_idx = 1
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            comment = line.lstrip("#").strip()
+            if ":" in comment:
+                key, _, val = comment.partition(":")
+                key = key.strip().lower()
+                val = val.strip()
+                if key in ("name", "title"):
+                    name = val
+                elif key == "civ":
+                    civ = val
+                elif key == "strategy":
+                    strategy = val
+                else:
+                    notes_lines.append(comment)
+            else:
+                notes_lines.append(comment)
+            continue
+
+        # Try to parse leading time token like "2:30" or "[2:30]"
+        time_str = ""
+        time_sec = 0
+        m = re.match(r"^\[?(\d{1,2}:\d{2})\]?\s*", line)
+        if m:
+            time_str = m.group(1)
+            time_sec = _mmss_to_sec(time_str)
+            line = line[m.end():]
+
+        # Try pop count (bare integer before description)
+        pop = 0
+        m2 = re.match(r"^(\d{1,3})\s+", line)
+        if m2 and int(m2.group(1)) < 300:
+            pop = int(m2.group(1))
+            line = line[m2.end():]
+
+        steps.append(BuildStep(
+            index=step_idx,
+            description=line,
+            time_str=time_str,
+            time_sec=time_sec,
+            population=pop,
+        ))
+        step_idx += 1
+
+    bo = BuildOrder(
+        name=name,
+        civ=civ,
+        strategy=strategy,
+        steps=steps,
+        notes="\n".join(notes_lines),
+        source_url=str(path),
+    )
+    logger.info("Loaded '%s' from TXT (%d steps)", bo.name, len(bo.steps))
+    return bo

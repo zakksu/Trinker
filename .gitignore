@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Build output
+build/
+dist/
+*.spec.bak
+
+# User data stays local — never commit
+*.db
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and caches in project folder (if any)
+*.log
+
+# Local debug scratch files
+_debug_bog.py
+_bog_sample.html

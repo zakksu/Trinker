@@ -1,0 +1,137 @@
+"""
+TRINKER - Application Configuration
+Centralizes all paths, constants, and user settings.
+Uses platformdirs for cross-platform data directory resolution.
+"""
+
+import json
+import sys
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Platform-aware application directories (no external dependency needed)
+# ---------------------------------------------------------------------------
+
+class _AppDirs:
+    """Minimal cross-platform directory resolver (no platformdirs dependency)."""
+
+    def __init__(self, app_name: str):
+        self.app_name = app_name
+
+    @property
+    def user_data_dir(self) -> str:
+        if sys.platform == "win32":
+            base = Path.home() / "AppData" / "Local"
+        elif sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support"
+        else:
+            base = Path.home() / ".local" / "share"
+        return str(base / self.app_name)
+
+    @property
+    def user_log_dir(self) -> str:
+        if sys.platform == "win32":
+            base = Path.home() / "AppData" / "Local"
+        elif sys.platform == "darwin":
+            base = Path.home() / "Library" / "Logs"
+        else:
+            base = Path.home() / ".local" / "share"
+        return str(Path(self.user_data_dir) / "logs")
+
+    @property
+    def user_cache_dir(self) -> str:
+        return str(Path(self.user_data_dir) / "cache")
+
+
+APP_DIRS = _AppDirs("TRINKER")
+
+# ---------------------------------------------------------------------------
+# Key file paths
+# ---------------------------------------------------------------------------
+
+DATA_DIR   = Path(APP_DIRS.user_data_dir)
+LOG_DIR    = Path(APP_DIRS.user_log_dir)
+CACHE_DIR  = Path(APP_DIRS.user_cache_dir)
+DB_PATH    = DATA_DIR / "trinker.db"
+BO_DIR     = DATA_DIR / "build_orders"   # local build order JSON cache
+EXPORT_DIR = DATA_DIR / "exports"
+
+# Create directories on import so downstream code never has to worry about it
+for _d in (DATA_DIR, LOG_DIR, CACHE_DIR, BO_DIR, EXPORT_DIR):
+    _d.mkdir(parents=True, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# AoE2 replay default locations (Windows-first, checked in order)
+# ---------------------------------------------------------------------------
+
+AO2_REPLAY_DIRS: list[Path] = [
+    Path.home() / "Documents" / "My Games" / "Age of Empires 2 DE",
+    Path.home() / "Games"  / "Age of Empires 2 DE",
+]
+
+# ---------------------------------------------------------------------------
+# External data sources
+# ---------------------------------------------------------------------------
+
+BUILDORDERGUIDE_BASE = "https://www.buildorderguide.com"
+AOE2GG_BASE          = "https://aoe2.gg"
+AOE2NET_BASE         = "https://aoe2.net/api"
+
+REQUEST_TIMEOUT = 15   # seconds
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "TRINKER/1.0 AoE2TrainingCompanion "
+        "(https://github.com/user/trinker; contact@example.com)"
+    )
+}
+
+# ---------------------------------------------------------------------------
+# Application settings (persisted as JSON)
+# ---------------------------------------------------------------------------
+
+SETTINGS_FILE = DATA_DIR / "settings.json"
+
+@dataclass
+class AppSettings:
+    """
+    All user-configurable preferences.
+    Saved to / loaded from SETTINGS_FILE as JSON.
+    """
+    theme: str = "dark"                  # "dark" | "light"
+    overlay_opacity: float = 0.88        # 0.0 – 1.0
+    overlay_position: list[int] = field(default_factory=lambda: [100, 100])
+    overlay_size: list[int]     = field(default_factory=lambda: [380, 600])
+    hotkey_next_step: str   = "Ctrl+Right"
+    hotkey_prev_step: str   = "Ctrl+Left"
+    hotkey_toggle_overlay: str = "Ctrl+Shift+O"
+    hotkey_start_session: str  = "Ctrl+Shift+S"
+    font_size: int = 11
+    auto_advance: bool = False           # auto-step on replay timer
+    show_timings: bool = True
+    ai_coach_enabled: bool = False
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3"
+    telemetry_opt_in: bool = False
+
+    def save(self) -> None:
+        """Persist settings to disk."""
+        SETTINGS_FILE.write_text(json.dumps(asdict(self), indent=2))
+
+    @classmethod
+    def load(cls) -> "AppSettings":
+        """Load settings from disk, falling back to defaults on any error."""
+        try:
+            if SETTINGS_FILE.exists():
+                data = json.loads(SETTINGS_FILE.read_text())
+                return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        except Exception:
+            pass
+        inst = cls()
+        inst.save()
+        return inst
+
+
+# Module-level singleton
+settings = AppSettings.load()
