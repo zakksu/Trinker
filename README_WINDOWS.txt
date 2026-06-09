@@ -13,8 +13,8 @@ STEP 1 — First-time setup (run once):
     • Create a "TRINKER" shortcut on your Desktop
 
 STEP 2 — Every time you want to launch TRINKER:
-  Double-click: TRINKER.bat
-  (or use the Desktop shortcut created in Step 1)
+  Double-click: LAUNCHER.bat  (recommended — retro launcher, auto-update)
+  Or: TRINKER.bat / Desktop shortcut
 
 STEP 2b — Launch WITH automatic updates (recommended):
   Double-click: TRINKER.bat  (or UPDATE_AND_RUN.bat)
