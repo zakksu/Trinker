@@ -10,6 +10,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('src', 'src'),
+        ('assets', 'assets'),
+        ('VERSION', '.'),
     ],
     hiddenimports=[
         'PySide6.QtCore',
@@ -52,5 +54,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,          # add icon.ico here when available
+    icon='assets/trinker.ico',
 )

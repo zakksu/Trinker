@@ -77,11 +77,11 @@ set "SHORTCUT=%USERPROFILE%\Desktop\TRINKER.bat"
     echo @echo off
     echo title TRINKER — AoE2 Training Companion
     echo cd /d "%TRINKER_DIR%"
-    echo call UPDATE_AND_RUN.bat
+    echo call LAUNCHER.bat
 ) > "%SHORTCUT%"
 
 echo  Shortcut created: %SHORTCUT%
-echo  (Uses UPDATE_AND_RUN.bat — pulls updates then launches)
+echo  (Uses LAUNCHER.bat — retro launcher with auto-update)
 echo.
 
 REM ─── Done ──────────────────────────────────────────────────────────────────

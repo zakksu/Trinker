@@ -140,7 +140,7 @@ class HeaderBar(QFrame):
         layout.addWidget(self.btn_overlay)
 
         # Version label
-        version_lbl = QLabel("v1.0.0")
+        version_lbl = QLabel(f"v{get_app_version()}")
         version_lbl.setStyleSheet("color: #3c3c4e; font-size: 10px;")
         layout.addWidget(version_lbl)
 
@@ -389,7 +389,7 @@ class TrinkerMainWindow(QMainWindow):
             self, "About TRINKER",
             "<h2>TRINKER</h2>"
             "<p><b>The Ultimate AoE2 Training Companion</b></p>"
-            "<p>Version 1.0.0</p>"
+            f"<p>Version {get_app_version()}</p>"
             "<p>Practice smarter. Improve faster.</p>"
             "<hr>"
             "<p>Built with Python + PySide6<br>"

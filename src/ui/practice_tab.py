@@ -276,6 +276,7 @@ class PracticeTab(QWidget):
         self._selected_bo: Optional[BuildOrder] = None
         self._replay_path: Optional[str] = None
         self._replay_info = None
+        self._replay_analysis = None
         self._coaching_thread = None
         self._coaching_worker = None
         self._setup_ui()
@@ -582,9 +583,12 @@ class PracticeTab(QWidget):
 
     def _load_replay(self, path: str, *, mark_seen: bool = True) -> None:
         from ..replay.parser import parse_replay, format_replay_duration
+        from ..replay.analyzer import analyze_replay
         info = parse_replay(path)
+        analysis = analyze_replay(path)
         self._replay_path = path
         self._replay_info = info
+        self._replay_analysis = analysis
 
         if mark_seen:
             try:
@@ -596,11 +600,58 @@ class PracticeTab(QWidget):
 
         civ = info.primary_civ()
         duration = format_replay_duration(info.duration_sec)
+        timing_bits = []
+        if analysis.feudal_time_sec:
+            timing_bits.append(f"Feudal {_sec_to_mmss(analysis.feudal_time_sec)}")
+        if analysis.castle_time_sec:
+            timing_bits.append(f"Castle {_sec_to_mmss(analysis.castle_time_sec)}")
+        timing_str = " | ".join(timing_bits) if timing_bits else "timings not detected"
+        conf = f" [{analysis.confidence} confidence]" if analysis.has_timings() else ""
+
         self.lbl_replay_info.setText(
             f"{Path(path).name}\n"
-            f"Map: {info.map_name} | Civ: {civ} | ~{duration}"
+            f"Map: {info.map_name} | Civ: {civ} | ~{duration}\n"
+            f"{timing_str}{conf}"
         )
+        self._auto_fill_from_replay(analysis)
         logger.info("Replay loaded for practice: %s", path)
+
+    def _auto_fill_from_replay(self, analysis) -> None:
+        """Pre-fill session fields from replay analysis data."""
+        filled: list[str] = []
+
+        if analysis.feudal_time_sec:
+            self._log_milestone_silent("Clicked Feudal", analysis.feudal_time_sec)
+            self._evaluate_feudal(analysis.feudal_time_sec)
+            filled.append(f"Feudal {_sec_to_mmss(analysis.feudal_time_sec)}")
+        if analysis.castle_time_sec:
+            self._log_milestone_silent("Clicked Castle", analysis.castle_time_sec)
+            self._evaluate_castle(analysis.castle_time_sec)
+            filled.append(f"Castle {_sec_to_mmss(analysis.castle_time_sec)}")
+        if analysis.imperial_time_sec:
+            self._log_milestone_silent("Clicked Imperial", analysis.imperial_time_sec)
+            filled.append(f"Imperial {_sec_to_mmss(analysis.imperial_time_sec)}")
+        if analysis.final_pop:
+            self.resource_tracker.sp_pop.setValue(analysis.final_pop)
+            filled.append(f"Pop {analysis.final_pop}")
+
+        if analysis.is_multiplayer:
+            self.cb_result.setCurrentText("practice")
+
+        if filled:
+            note = f"Auto-filled from replay ({analysis.confidence} confidence): {', '.join(filled)}"
+            existing = self.ed_session_notes.toPlainText().strip()
+            self.ed_session_notes.setPlainText(f"{existing}\n{note}".strip() if existing else note)
+
+    def _log_milestone_silent(self, label: str, elapsed_sec: int) -> None:
+        """Log a milestone without re-triggering evaluation loops."""
+        if any(m.label == label and m.game_time_sec == elapsed_sec for m in self._milestones):
+            return
+        ms = Milestone(label=label, game_time_sec=elapsed_sec, wall_time=now_iso())
+        self._milestones.append(ms)
+        item = QListWidgetItem(f"[{_sec_to_mmss(elapsed_sec)}] {label} (replay)")
+        item.setForeground(Qt.GlobalColor.green)
+        self.milestone_list.addItem(item)
 
     def _on_clear_replay(self) -> None:
         self._replay_path = None
@@ -608,30 +659,13 @@ class PracticeTab(QWidget):
         self.lbl_replay_info.setText("No replay loaded")
 
     def _on_timer_tick(self, elapsed_sec: int) -> None:
-        """Auto-advance overlay steps when enabled in Settings."""
-        if not settings.auto_advance or not self.overlay:
+        """Sync overlay step timing + progress bars when auto-advance is on."""
+        if not self.overlay or not self.overlay.isVisible():
             return
-        if not self.overlay.isVisible():
-            return
-        self.overlay.sync_to_elapsed(elapsed_sec)
-        self._update_overlay_timing_status(elapsed_sec)
-
-    def _update_overlay_timing_status(self, elapsed_sec: int) -> None:
-        """Push green/yellow/red status to the overlay for the current step."""
-        if not self.overlay or not self._selected_bo:
-            return
-
-        step = self.overlay.get_current_step()
-        if not step or not step.time_sec:
-            return
-
-        delta = elapsed_sec - step.time_sec
-        if abs(delta) <= 15:
-            self.overlay.set_status("green", f"On pace ({_sec_to_mmss(elapsed_sec)})")
-        elif delta <= 45:
-            self.overlay.set_status("yellow", f"Slightly behind ({_sec_to_mmss(elapsed_sec)})")
-        else:
-            self.overlay.set_status("red", f"Behind schedule ({_sec_to_mmss(elapsed_sec)})")
+        if settings.auto_advance:
+            self.overlay.sync_to_elapsed(elapsed_sec)
+        elif self._selected_bo:
+            self.overlay.sync_to_elapsed(elapsed_sec)
 
     # ── Milestones ────────────────────────────────────────────────────────
 

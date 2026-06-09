@@ -390,3 +390,144 @@ def import_from_txt_file(path: str | Path) -> BuildOrder:
     )
     logger.info("Loaded '%s' from TXT (%d steps)", bo.name, len(bo.steps))
     return bo
+
+
+# ---------------------------------------------------------------------------
+# Multi-source URL import (tries each source until one succeeds)
+# ---------------------------------------------------------------------------
+
+def _finalize_import(bo: BuildOrder) -> BuildOrder:
+    """Apply enrichment and age inference to imported build orders."""
+    from .step_enricher import enrich_steps, infer_age_from_text
+    for step in bo.steps:
+        if not step.age:
+            step.age = infer_age_from_text(step.description)
+        if step.time_str and not step.time_sec:
+            step.time_sec = _mmss_to_sec(step.time_str)
+    bo.steps = enrich_steps(bo.steps)
+    return bo
+
+
+def import_from_aoe2guides(url: str) -> BuildOrder:
+    """Parse build orders from aoe2guides.com-style pages."""
+    parsed = urlparse(url)
+    if "aoe2guides" not in parsed.netloc:
+        raise ValueError(f"Not an aoe2guides.com URL: {url}")
+
+    slug = parsed.path.strip("/").split("/")[-1] or "build"
+    html = _get(url, cache_key=f"aoe2g_{slug}")
+    soup = BeautifulSoup(html, "html.parser")
+
+    name = _extract_text(soup, "h1") or slug.replace("-", " ").title()
+    steps = _parse_bog_steps(soup) or _parse_generic_steps(soup)
+    if not steps:
+        raise RuntimeError("Could not parse steps from aoe2guides.com")
+
+    bo = BuildOrder(
+        name=name, civ="Any", strategy=_infer_strategy(name),
+        source_url=url, external_id=f"aoe2g_{slug}", steps=steps,
+        tags=_infer_tags(name, "Any", ""),
+    )
+    return _finalize_import(bo)
+
+
+def import_from_spreadsheet_json(url: str) -> BuildOrder:
+    """
+    Import from public Google Sheets JSON export or raw JSON build-order URLs.
+    """
+    if "docs.google.com" in url:
+        m = re.search(r"/d/([a-zA-Z0-9-_]+)", url)
+        if m:
+            sheet_id = m.group(1)
+            url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:json"
+
+    resp = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    text = resp.text
+    if text.startswith("/*"):
+        text = text[text.find("{"): text.rfind("}") + 1]
+
+    data = json.loads(text)
+    rows = data if isinstance(data, list) else data.get("rows") or data.get("steps") or []
+    steps: list[BuildStep] = []
+    name = data.get("name", "Imported Build") if isinstance(data, dict) else "Imported Build"
+
+    for i, row in enumerate(rows, start=1):
+        if isinstance(row, str):
+            steps.append(BuildStep(index=i, description=row))
+        elif isinstance(row, dict):
+            desc = row.get("description") or row.get("step") or row.get("c", "")
+            if not desc:
+                continue
+            steps.append(BuildStep(
+                index=i, description=str(desc),
+                time_str=str(row.get("time") or row.get("time_str") or ""),
+                population=int(row.get("pop") or row.get("population") or 0),
+            ))
+
+    if not steps:
+        raise RuntimeError("No steps found in spreadsheet/JSON URL")
+
+    bo = BuildOrder(name=name, civ="Any", source_url=url, steps=steps)
+    return _finalize_import(bo)
+
+
+def import_from_url(url: str) -> BuildOrder:
+    """
+    Import a build order from any supported URL.
+    Tries multiple sources in order until one succeeds.
+
+    Supported:
+      - buildorderguide.com
+      - aoe2guides.com
+      - Google Sheets / raw JSON URLs
+    """
+    url = url.strip()
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    sources: list[tuple[str, callable]] = []
+
+    if "buildorderguide.com" in host:
+        sources.append(("buildorderguide.com", import_from_buildorderguide))
+    if "aoe2guides" in host:
+        sources.append(("aoe2guides.com", import_from_aoe2guides))
+    if any(x in host for x in ("docs.google.com", "raw.githubusercontent.com")) or url.endswith(".json"):
+        sources.append(("JSON/Sheets", import_from_spreadsheet_json))
+
+    # Unknown host — try all parsers
+    if not sources:
+        sources = [
+            ("buildorderguide.com", import_from_buildorderguide),
+            ("aoe2guides.com", import_from_aoe2guides),
+            ("generic HTML", lambda u: _finalize_import(_import_generic_html(u))),
+            ("JSON/Sheets", import_from_spreadsheet_json),
+        ]
+
+    errors: list[str] = []
+    for label, fn in sources:
+        try:
+            bo = fn(url)
+            logger.info("Imported '%s' from %s (%d steps)", bo.name, label, len(bo.steps))
+            return bo
+        except Exception as exc:
+            errors.append(f"{label}: {exc}")
+            logger.debug("Import via %s failed: %s", label, exc)
+
+    raise RuntimeError(
+        "Could not import from any source.\n" + "\n".join(errors)
+    )
+
+
+def _import_generic_html(url: str) -> BuildOrder:
+    """Last-resort: pull title + list items from any build-order-like page."""
+    html = _get(url, cache_key=f"generic_{hash(url) % 10**8}")
+    soup = BeautifulSoup(html, "html.parser")
+    name = _extract_text(soup, "h1") or urlparse(url).path.split("/")[-1]
+    steps = _parse_bog_steps(soup) or _parse_generic_steps(soup)
+    if not steps:
+        raise RuntimeError("No steps found on page")
+    return BuildOrder(
+        name=name, civ="Any", strategy=_infer_strategy(name),
+        source_url=url, steps=steps,
+    )

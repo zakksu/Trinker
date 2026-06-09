@@ -17,10 +17,11 @@ from PySide6.QtCore import Qt, QPoint, Signal, QTimer, QPropertyAnimation, QEasi
 from PySide6.QtGui import QFont, QColor, QPalette, QKeySequence
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSizeGrip, QFrame, QGraphicsOpacityEffect,
+    QSizeGrip, QFrame, QGraphicsOpacityEffect, QProgressBar,
 )
 
 from ..build_orders.models import BuildOrder, BuildStep
+from ..build_orders.step_timer import compute_step_timing
 from ..core.config import settings
 from ..core.logger import logger
 
@@ -48,6 +49,41 @@ def _rgba(hex_color: str, alpha: float = 1.0) -> str:
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha:.2f})"
+
+
+class StepTimingBar(QFrame):
+    """Progress bar showing time remaining to hit the ideal step deadline."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        self.lbl_timing = QLabel("Step timer — start session")
+        self.lbl_timing.setStyleSheet(f"color: {DIM_COLOR}; font-size: 10px;")
+        layout.addWidget(self.lbl_timing)
+
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 100)
+        self.bar.setValue(0)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(10)
+        self.bar.setStyleSheet("""
+            QProgressBar { background: #1a1a20; border: 1px solid #2c2c2e; border-radius: 4px; }
+            QProgressBar::chunk { background: #3498db; border-radius: 3px; }
+        """)
+        layout.addWidget(self.bar)
+
+    def update_timing(self, progress: float, status: str, message: str) -> None:
+        color = STATUS_COLORS.get(status, STATUS_COLORS["neutral"])
+        self.bar.setValue(int(progress))
+        self.bar.setStyleSheet(f"""
+            QProgressBar {{ background: #1a1a20; border: 1px solid #2c2c2e; border-radius: 4px; }}
+            QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}
+        """)
+        self.lbl_timing.setText(message)
+        self.lbl_timing.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: bold;")
 
 
 class StepCard(QFrame):
@@ -176,7 +212,12 @@ class BuildOrderOverlay(QWidget):
         self._build_order: Optional[BuildOrder] = None
         self._current_index = 0          # 0-based index into steps list
         self._is_session_active = False
+        self._elapsed_sec = 0
         self._drag_start: Optional[QPoint] = None
+
+        self._tick = QTimer(self)
+        self._tick.setInterval(1000)
+        self._tick.timeout.connect(self._on_tick)
 
         self._setup_window()
         self._setup_ui()
@@ -248,6 +289,9 @@ class BuildOrderOverlay(QWidget):
         # ── Current step card ─────────────────────────────────────────────
         self.current_card = StepCard(is_current=True, parent=self)
         inner.addWidget(self.current_card)
+
+        self.step_timing_bar = StepTimingBar(parent=self)
+        inner.addWidget(self.step_timing_bar)
 
         # ── Next step card ────────────────────────────────────────────────
         self.next_card = StepCard(is_current=False, parent=self)
@@ -350,6 +394,7 @@ class BuildOrderOverlay(QWidget):
 
     def sync_to_elapsed(self, elapsed_sec: int) -> None:
         """Advance to the build step that matches elapsed game time."""
+        self._elapsed_sec = elapsed_sec
         if not self._build_order or not self._build_order.steps:
             return
 
@@ -362,6 +407,21 @@ class BuildOrderOverlay(QWidget):
             self._current_index = best_idx
             self._refresh_steps()
             self.step_changed.emit(self._current_index)
+
+        self._update_step_timing_bar()
+
+    def _update_step_timing_bar(self) -> None:
+        if not self._build_order:
+            return
+        state = compute_step_timing(self._build_order, self._current_index, self._elapsed_sec)
+        self.step_timing_bar.update_timing(state.progress_pct, state.status, state.message)
+        if self._is_session_active:
+            self.set_status(state.status, state.message)
+
+    def _on_tick(self) -> None:
+        if self._is_session_active:
+            self._elapsed_sec += 1
+            self.sync_to_elapsed(self._elapsed_sec)
 
     def get_current_step(self) -> Optional[BuildStep]:
         """Return the currently displayed step, or None."""
@@ -393,11 +453,16 @@ class BuildOrderOverlay(QWidget):
     def _toggle_session(self) -> None:
         if self._is_session_active:
             self._is_session_active = False
+            self._tick.stop()
             self.btn_session.setText("▶ Start Session")
             self.lbl_status.setText("Session stopped")
             self.session_stopped.emit()
         else:
             self._is_session_active = True
+            self._elapsed_sec = 0
+            self._current_index = 0
+            self._refresh_steps()
+            self._tick.start()
             self.btn_session.setText("⏹ Stop Session")
             self.lbl_status.setText("Session in progress…")
             self.session_started.emit()

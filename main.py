@@ -25,14 +25,14 @@ from PySide6.QtCore import Qt
 
 from src.core.logger import logger
 from src.core.database import init_db
-from src.core.config import settings
+from src.core.config import settings, get_app_version
 
 
 def _configure_app(app: QApplication) -> None:
     """Apply global Qt application settings before any window opens."""
     app.setApplicationName("TRINKER")
     app.setApplicationDisplayName("TRINKER — AoE2 Training Companion")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion(get_app_version())
     app.setOrganizationName("TRINKER")
     app.setOrganizationDomain("trinker.app")
 

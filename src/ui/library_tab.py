@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..build_orders.importer import (
-    import_from_buildorderguide, import_from_json_file, import_from_txt_file
+    import_from_url, import_from_json_file, import_from_txt_file
 )
 from ..build_orders.manager import (
     get_all_build_orders, save_build_order, delete_build_order,
@@ -78,7 +78,7 @@ class _ImportWorker(QObject):
 
     def run(self) -> None:
         try:
-            bo = import_from_buildorderguide(self.url)
+            bo = import_from_url(self.url)
             self.finished.emit(bo)
         except Exception as exc:
             logger.error("Import failed: %s", exc, exc_info=True)
