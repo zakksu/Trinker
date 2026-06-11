@@ -26,6 +26,7 @@ from ..analytics.session import (
     get_accuracy_trend, get_most_practiced_builds, get_activity_heatmap,
     delete_session,
 )
+from ..analytics.history import get_recurring_themes, build_historical_summary
 from ..analytics.exporter import export_sessions_csv, export_sessions_json
 from ..build_orders.manager import get_all_build_orders
 from ..core.logger import logger
@@ -195,9 +196,10 @@ class AnalyticsTab(QWidget):
         # ── Top tabs ──────────────────────────────────────────────────────
         tabs = QTabWidget()
         tabs.addTab(self._build_overview_tab(), "Overview")
-        tabs.addTab(self._build_history_tab(), "Session History")
+        tabs.addTab(self._build_session_history_tab(), "Session History")
         tabs.addTab(self._build_charts_tab(), "Progress Charts")
         tabs.addTab(self._build_leaderboard_tab(), "Most Practiced")
+        tabs.addTab(self._build_patterns_tab(), "History & Patterns")
         tabs.addTab(self._build_ai_tab(), "AI Coach")
         root.addWidget(tabs)
 
@@ -215,12 +217,17 @@ class AnalyticsTab(QWidget):
         self.cb_bo_filter = QComboBox()
         self.cb_bo_filter.addItem("All builds", None)
         self.cb_bo_filter.currentIndexChanged.connect(self._refresh_overview)
+        self.cb_bo_filter.currentIndexChanged.connect(self._refresh_patterns)
         filter_row.addWidget(self.cb_bo_filter)
         filter_row.addStretch()
         btn_refresh = QPushButton("↺ Refresh")
         btn_refresh.clicked.connect(self.refresh)
         filter_row.addWidget(btn_refresh)
         layout.addLayout(filter_row)
+
+        hint = QLabel("v2.0: stats use quality-filtered MP sessions only — no fake 0:23 feudal times.")
+        hint.setStyleSheet("color: #5a6a7a; font-size: 10px;")
+        layout.addWidget(hint)
 
         # Stat cards row
         cards_row = QHBoxLayout()
@@ -248,7 +255,7 @@ class AnalyticsTab(QWidget):
         layout.addStretch()
         return w
 
-    def _build_history_tab(self) -> QWidget:
+    def _build_session_history_tab(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -291,9 +298,9 @@ class AnalyticsTab(QWidget):
         # Table
         self.history_table = QTableWidget(0, 8)
         self.history_table.setHorizontalHeaderLabels([
-            "Date", "Build Order", "Duration", "Feudal", "Castle", "Accuracy", "Result", "Notes"
+            "Date", "Civ", "Build Order", "Feudal", "Castle", "Quality", "Result", "Notes"
         ])
-        self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.history_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.history_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -358,6 +365,25 @@ class AnalyticsTab(QWidget):
         layout.addStretch()
         return w
 
+    def _build_patterns_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        layout.addWidget(QLabel("Recurring themes from your practice notes:"))
+        self.lbl_themes = QLabel("Loading…")
+        self.lbl_themes.setWordWrap(True)
+        self.lbl_themes.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        layout.addWidget(self.lbl_themes)
+
+        layout.addWidget(QLabel("Historical summary (selected build filter):"))
+        self.hist_output = QTextEdit()
+        self.hist_output.setReadOnly(True)
+        self.hist_output.setPlaceholderText("Historical analysis appears here…")
+        layout.addWidget(self.hist_output)
+        return w
+
     def _build_ai_tab(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
@@ -390,8 +416,27 @@ class AnalyticsTab(QWidget):
         self._populate_bo_filters()
         self._refresh_overview()
         self._refresh_history()
+        self._refresh_patterns()
         self._refresh_charts()
         self._refresh_leaderboard()
+
+    def _refresh_patterns(self) -> None:
+        themes = get_recurring_themes()
+        if themes:
+            self.lbl_themes.setText(
+                "  ·  ".join(f"{t} ({c})" for t, c in themes[:8])
+            )
+        else:
+            self.lbl_themes.setText("No patterns yet — save sessions with notes.")
+
+        bo_id = self.cb_bo_filter.currentData()
+        civ = "Any"
+        if bo_id:
+            from ..build_orders.manager import get_build_order
+            bo = get_build_order(bo_id)
+            if bo:
+                civ = bo.civ
+        self.hist_output.setPlainText(build_historical_summary(civ, bo_id))
 
     def _populate_bo_filters(self) -> None:
         bos = get_all_build_orders()
@@ -464,14 +509,16 @@ class AnalyticsTab(QWidget):
             bo = bos.get(s.build_order_id)
             bo_name = bo.name if bo else f"BO #{s.build_order_id}"
 
+            civ = s.civ or (bo.civ if bo else "—")
+            quality = getattr(s, "data_quality", "unknown") or "unknown"
             self.history_table.setItem(row, 0, QTableWidgetItem(s.date))
-            self.history_table.setItem(row, 1, QTableWidgetItem(bo_name))
-            self.history_table.setItem(row, 2, QTableWidgetItem(_sec_to_mmss(s.duration_sec)))
+            self.history_table.setItem(row, 1, QTableWidgetItem(civ))
+            self.history_table.setItem(row, 2, QTableWidgetItem(bo_name))
             self.history_table.setItem(row, 3, QTableWidgetItem(_sec_to_mmss(s.feudal_time_sec)))
             self.history_table.setItem(row, 4, QTableWidgetItem(_sec_to_mmss(s.castle_time_sec)))
-            self.history_table.setItem(row, 5, QTableWidgetItem(_pct(s.accuracy_pct)))
+            self.history_table.setItem(row, 5, QTableWidgetItem(quality))
             self.history_table.setItem(row, 6, QTableWidgetItem(s.result))
-            self.history_table.setItem(row, 7, QTableWidgetItem(s.notes[:60] if s.notes else ""))
+            self.history_table.setItem(row, 7, QTableWidgetItem(s.notes[:80] if s.notes else ""))
             self.history_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, s.id)
 
     def _refresh_charts(self) -> None:

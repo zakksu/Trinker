@@ -2,6 +2,13 @@ PySide6>=6.6.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 matplotlib>=3.8.0
+mgz>=1.8.26
+# When DE patches break pip mgz, upgrade from GitHub:
+# pip install git+https://github.com/happyleavesaoc/aoc-mgz.git
+
+mss>=9.0.0
+# Optional live OCR (enable in Settings)
+# easyocr>=1.7.0
 
 # Dev / CI
 pytest>=8.0.0

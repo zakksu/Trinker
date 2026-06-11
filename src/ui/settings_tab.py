@@ -84,6 +84,9 @@ class SettingsTab(QWidget):
         self.sp_font.setRange(8, 22)
         self.sp_font.setSuffix(" px")
         appear_form.addRow("Font Size", self.sp_font)
+
+        self.chk_simple_mode = QCheckBox("Simple mode — hide advanced Practice panels (recommended)")
+        appear_form.addRow("", self.chk_simple_mode)
         layout.addWidget(appear_group)
 
         # ── Overlay ───────────────────────────────────────────────────────
@@ -109,8 +112,22 @@ class SettingsTab(QWidget):
         self.chk_auto_advance = QCheckBox("Auto-advance steps (replay sync)")
         overlay_form.addRow("", self.chk_auto_advance)
 
-        self.chk_auto_replay = QCheckBox("Prompt to import last replay after a new game")
+        self.chk_auto_detect = QCheckBox(
+            "Auto-detect games — import replays in the background (recommended)"
+        )
+        overlay_form.addRow("", self.chk_auto_detect)
+
+        self.chk_sync_pause = QCheckBox("Pause overlay timer when AoE2 is paused")
+        overlay_form.addRow("", self.chk_sync_pause)
+
+        self.chk_auto_replay = QCheckBox("Prompt to import last replay after a new game (manual mode)")
         overlay_form.addRow("", self.chk_auto_replay)
+
+        self.chk_postgame_coach = QCheckBox("Auto-run post-game AI coach after replay import")
+        overlay_form.addRow("", self.chk_postgame_coach)
+
+        self.chk_ocr = QCheckBox("Enable OCR capture (experimental — requires mss + easyocr)")
+        overlay_form.addRow("", self.chk_ocr)
         layout.addWidget(overlay_group)
 
         # ── Hotkeys ───────────────────────────────────────────────────────
@@ -126,7 +143,7 @@ class SettingsTab(QWidget):
         hotkey_form.addRow("Next Step",       self.ed_hotkey_next)
         hotkey_form.addRow("Previous Step",   self.ed_hotkey_prev)
         hotkey_form.addRow("Toggle Overlay",  self.ed_hotkey_overlay)
-        hotkey_form.addRow("Start/Stop Session", self.ed_hotkey_session)
+        hotkey_form.addRow("Pause/Resume Overlay Timer", self.ed_hotkey_session)
 
         hotkey_hint = QLabel("Note: Hotkeys require the app window to be focused on most platforms.")
         hotkey_hint.setStyleSheet("color: #7f8c8d; font-size: 10px;")
@@ -139,7 +156,7 @@ class SettingsTab(QWidget):
         ai_form  = QFormLayout(ai_group)
         ai_form.setSpacing(10)
 
-        self.chk_ai_enabled = QCheckBox("Enable AI Coach")
+        self.chk_ai_enabled = QCheckBox("Enable AI Coach (auto-enabled when Ollama is running)")
         ai_form.addRow("", self.chk_ai_enabled)
 
         self.ed_ollama_url = QLineEdit()
@@ -229,7 +246,12 @@ class SettingsTab(QWidget):
         self.slider_opacity.setValue(int(settings.overlay_opacity * 100))
         self.chk_show_timings.setChecked(settings.show_timings)
         self.chk_auto_advance.setChecked(settings.auto_advance)
+        self.chk_auto_detect.setChecked(settings.auto_detect_sessions)
+        self.chk_sync_pause.setChecked(settings.overlay_sync_game_pause)
         self.chk_auto_replay.setChecked(settings.auto_prompt_new_replay)
+        self.chk_postgame_coach.setChecked(settings.auto_postgame_coach)
+        self.chk_ocr.setChecked(settings.ocr_capture_enabled)
+        self.chk_simple_mode.setChecked(settings.simple_mode)
         self.ed_hotkey_next.setText(settings.hotkey_next_step)
         self.ed_hotkey_prev.setText(settings.hotkey_prev_step)
         self.ed_hotkey_overlay.setText(settings.hotkey_toggle_overlay)
@@ -245,7 +267,12 @@ class SettingsTab(QWidget):
         settings.overlay_opacity = self.slider_opacity.value() / 100.0
         settings.show_timings   = self.chk_show_timings.isChecked()
         settings.auto_advance   = self.chk_auto_advance.isChecked()
+        settings.auto_detect_sessions = self.chk_auto_detect.isChecked()
+        settings.overlay_sync_game_pause = self.chk_sync_pause.isChecked()
         settings.auto_prompt_new_replay = self.chk_auto_replay.isChecked()
+        settings.auto_postgame_coach = self.chk_postgame_coach.isChecked()
+        settings.ocr_capture_enabled = self.chk_ocr.isChecked()
+        settings.simple_mode = self.chk_simple_mode.isChecked()
         settings.hotkey_next_step      = self.ed_hotkey_next.text().strip()
         settings.hotkey_prev_step      = self.ed_hotkey_prev.text().strip()
         settings.hotkey_toggle_overlay = self.ed_hotkey_overlay.text().strip()

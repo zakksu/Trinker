@@ -64,9 +64,16 @@ def _parse_filename_metadata(path: Path) -> dict:
 def _scan_age_times(data: bytes) -> dict[str, int]:
     """
     Scan replay binary for age-up timing hints.
-    Looks for float game-time values near age-related string markers.
+    Uses strict realistic windows — rejects garbage like 0:23 feudal.
     """
-    times: dict[str, int] = {}
+    from .validate import FEUDAL_MIN, FEUDAL_MAX, CASTLE_MIN, CASTLE_MAX, IMPERIAL_MIN, IMPERIAL_MAX
+
+    ranges = {
+        "feudal": (FEUDAL_MIN, FEUDAL_MAX),
+        "castle": (CASTLE_MIN, CASTLE_MAX),
+        "imperial": (IMPERIAL_MIN, IMPERIAL_MAX),
+    }
+    candidates: dict[str, list[int]] = {k: [] for k in ranges}
 
     for marker, age_key in _AGE_RESEARCH_MARKERS.items():
         idx = 0
@@ -74,21 +81,25 @@ def _scan_age_times(data: bytes) -> dict[str, int]:
             pos = data.find(marker, idx)
             if pos == -1:
                 break
-            # Search nearby bytes for plausible game-time floats (0–3600 sec)
-            window_start = max(0, pos - 64)
-            window_end = min(len(data), pos + 64)
+            window_start = max(0, pos - 128)
+            window_end = min(len(data), pos + 128)
             window = data[window_start:window_end]
+            lo, hi = ranges[age_key]
             for off in range(0, len(window) - 4, 4):
                 try:
                     val = struct.unpack_from("<f", window, off)[0]
-                    if 30 <= val <= 3600:
-                        sec = int(val)
-                        if age_key not in times or sec < times[age_key]:
-                            times[age_key] = sec
+                    if lo <= val <= hi:
+                        candidates[age_key].append(int(val))
                 except struct.error:
                     pass
             idx = pos + len(marker)
 
+    times: dict[str, int] = {}
+    for key, vals in candidates.items():
+        if vals:
+            # Prefer median candidate — more stable than min
+            vals.sort()
+            times[key] = vals[len(vals) // 2]
     return times
 
 
@@ -104,54 +115,24 @@ def _scan_population_peaks(data: bytes) -> Optional[int]:
 
 
 def analyze_replay(path: str | Path) -> ReplayAnalysis:
-    """
-    Full analysis pass on a replay file.
-    Combines header parse + binary scans + filename metadata.
-    """
-    path = Path(path)
-    info: ReplayInfo = parse_replay(path)
-    meta = _parse_filename_metadata(path)
+    """Full analysis via 2.0 profile pipeline (backward-compatible ReplayAnalysis)."""
+    from .profile import extract_replay_profile
 
+    profile = extract_replay_profile(path)
     analysis = ReplayAnalysis(
-        replay_path=str(path),
-        civ=info.primary_civ(),
-        map_name=info.map_name,
-        duration_sec=min(info.duration_sec, 7200),
-        is_multiplayer=meta["is_mp"],
-        is_ranked=meta["is_ranked"],
-        recorded_at=meta["recorded_at"],
-        parse_errors=list(info.parse_errors),
-    )
-
-    try:
-        data = path.read_bytes()
-    except OSError as exc:
-        analysis.parse_errors.append(str(exc))
-        return analysis
-
-    age_times = _scan_age_times(data)
-    if "feudal" in age_times:
-        analysis.feudal_time_sec = age_times["feudal"]
-        analysis.confidence = "medium"
-    if "castle" in age_times:
-        analysis.castle_time_sec = age_times["castle"]
-        analysis.confidence = "medium"
-    if "imperial" in age_times:
-        analysis.imperial_time_sec = age_times["imperial"]
-
-    pop = _scan_population_peaks(data)
-    if pop:
-        analysis.final_pop = pop
-
-    # Tag pro/community replays from path hints
-    path_l = str(path).lower()
-    if any(k in path_l for k in ("hera", "viper", "lierrey", "tournament", "esports")):
-        analysis.source_label = "Pro / tournament replay"
-        analysis.confidence = "medium"
-
-    logger.info(
-        "Replay analysis: %s | feudal=%s castle=%s pop=%s conf=%s",
-        path.name, analysis.feudal_time_sec, analysis.castle_time_sec,
-        analysis.final_pop, analysis.confidence,
+        replay_path=profile.replay_path,
+        civ=profile.civ,
+        map_name=profile.map_name,
+        duration_sec=profile.duration_sec or 0,
+        feudal_time_sec=profile.feudal_time_sec,
+        castle_time_sec=profile.castle_time_sec,
+        imperial_time_sec=profile.imperial_time_sec,
+        final_pop=profile.final_pop,
+        is_multiplayer=profile.game_mode == "mp",
+        is_ranked=profile.is_ranked,
+        recorded_at=profile.recorded_at,
+        confidence=profile.confidence,
+        parse_errors=profile.parse_errors + profile.validation_issues,
+        source_label=profile.parse_source,
     )
     return analysis

@@ -8,6 +8,7 @@ import json
 import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +115,7 @@ class AppSettings:
     theme: str = "dark"                  # "dark" | "light"
     overlay_opacity: float = 0.88        # 0.0 – 1.0
     overlay_position: list[int] = field(default_factory=lambda: [100, 100])
-    overlay_size: list[int]     = field(default_factory=lambda: [380, 600])
+    overlay_size: list[int]     = field(default_factory=lambda: [300, 340])
     hotkey_next_step: str   = "Ctrl+Right"
     hotkey_prev_step: str   = "Ctrl+Left"
     hotkey_toggle_overlay: str = "Ctrl+Shift+O"
@@ -122,13 +123,21 @@ class AppSettings:
     font_size: int = 11
     auto_advance: bool = False           # auto-step on replay timer
     show_timings: bool = True
-    ai_coach_enabled: bool = False
+    ai_coach_enabled: bool = True
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
     telemetry_opt_in: bool = False
     auto_prompt_new_replay: bool = True    # ask to import after a new game
     last_seen_replay_mtime: float = 0.0    # tracks newest replay we've seen
     last_seen_replay_path: str = ""        # path of last acknowledged replay
+    auto_postgame_coach: bool = True       # run AI coach after new replay import
+    overlay_coach_alert: str = ""          # pinned reminder for next overlay session
+    overlay_coach_alert_bo_id: Optional[int] = None
+    ocr_capture_enabled: bool = False      # optional live OCR (mss + easyocr)
+    simple_mode: bool = True             # hide advanced Practice panels
+    last_practice_bo_id: Optional[int] = None
+    auto_detect_sessions: bool = True    # auto-import replays in background
+    overlay_sync_game_pause: bool = True # pause overlay timer when game is paused
 
     def save(self) -> None:
         """Persist settings to disk."""

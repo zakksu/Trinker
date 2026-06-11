@@ -37,7 +37,7 @@ echo [2/5] Installing dependencies (PySide6, requests, beautifulsoup4, matplotli
 echo  This may take 2-5 minutes on first run...
 echo.
 python -m pip install --upgrade pip --quiet
-python -m pip install PySide6 requests beautifulsoup4 matplotlib --quiet
+python -m pip install PySide6 requests beautifulsoup4 matplotlib mss --quiet
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo  ERROR: Failed to install dependencies.

@@ -100,6 +100,30 @@ class _CoachingDialog(QDialog):
         self.btn_close.setEnabled(True)
 
 
+class _PostGameCoachWorker(QObject):
+    finished = Signal(object)
+    error    = Signal(str)
+
+    def __init__(self, replay_path: str, civ: str, strategy: str, bo_id, bo_name: str):
+        super().__init__()
+        self.replay_path = replay_path
+        self.civ = civ
+        self.strategy = strategy
+        self.bo_id = bo_id
+        self.bo_name = bo_name
+
+    def run(self) -> None:
+        try:
+            from ..ai_coach.postgame import run_postgame_coach
+            result = run_postgame_coach(
+                self.replay_path, self.civ, self.strategy,
+                self.bo_id, self.bo_name,
+            )
+            self.finished.emit(result)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class _CoachingWorker(QObject):
     finished = Signal(str)
     error    = Signal(str)
@@ -279,13 +303,38 @@ class PracticeTab(QWidget):
         self._replay_analysis = None
         self._coaching_thread = None
         self._coaching_worker = None
+        self._postgame_thread = None
+        self._postgame_worker = None
         self._setup_ui()
         self._load_build_orders()
 
     def _setup_ui(self) -> None:
-        root = QHBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(10)
+
+        self.lbl_guidance = QLabel("")
+        self.lbl_guidance.setWordWrap(True)
+        self.lbl_guidance.setStyleSheet(
+            "background: #1c3a5c; color: #a8d4ff; border: 1px solid #2c5a8c; "
+            "border-radius: 8px; padding: 10px 14px; font-size: 12px;"
+        )
+        outer.addWidget(self.lbl_guidance)
+        self._update_guidance()
+
+        self.btn_toggle_advanced = QPushButton("Show all options ▾")
+        self.btn_toggle_advanced.setStyleSheet(
+            "QPushButton { color: #7f8c8d; border: none; text-align: left; padding: 4px 0; }"
+            "QPushButton:hover { color: #3498db; }"
+        )
+        self.btn_toggle_advanced.clicked.connect(self._toggle_advanced)
+        outer.addWidget(self.btn_toggle_advanced)
+
+        content = QWidget()
+        root = QHBoxLayout(content)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(16)
+        outer.addWidget(content, stretch=1)
 
         # ── Left panel ────────────────────────────────────────────────────
         left = QVBoxLayout()
@@ -310,23 +359,26 @@ class PracticeTab(QWidget):
         self.timer_widget.elapsed_changed.connect(self._on_timer_tick)
         timer_layout.addWidget(self.timer_widget)
 
-        # Quick milestone buttons
-        quick_row = QHBoxLayout()
+        # Quick milestone buttons (advanced)
+        self.quick_milestone_row = QWidget()
+        quick_row = QHBoxLayout(self.quick_milestone_row)
+        quick_row.setContentsMargins(0, 0, 0, 0)
         quick_row.setSpacing(6)
         for label in ["Clicked Feudal", "Clicked Castle", "Clicked Imperial", "Hit 100 Pop"]:
             btn = QPushButton(label)
             btn.setStyleSheet("QPushButton { font-size: 10px; padding: 4px 8px; }")
             btn.clicked.connect(lambda checked, l=label: self._log_milestone(l))
             quick_row.addWidget(btn)
-        timer_layout.addLayout(quick_row)
+        timer_layout.addWidget(self.quick_milestone_row)
         left.addWidget(timer_group)
 
-        # Resource tracker
+        # Resource tracker (advanced)
         self.resource_tracker = ResourceTracker()
         left.addWidget(self.resource_tracker)
 
         # Replay sync
-        replay_group = QGroupBox("Replay Sync")
+        self.replay_group = QGroupBox("Replay Sync")
+        replay_group = self.replay_group
         replay_layout = QVBoxLayout(replay_group)
         replay_layout.setSpacing(6)
 
@@ -380,12 +432,15 @@ class PracticeTab(QWidget):
         left.addStretch()
         root.addLayout(left, stretch=2)
 
-        # ── Right panel ───────────────────────────────────────────────────
-        right = QVBoxLayout()
+        # ── Right panel (mostly advanced) ───────────────────────────────
+        self.right_panel = QWidget()
+        right = QVBoxLayout(self.right_panel)
+        right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(12)
 
         # Performance feedback
-        feedback_group = QGroupBox("Performance Feedback")
+        self.feedback_group = QGroupBox("Performance Feedback")
+        feedback_group = self.feedback_group
         feedback_layout = QVBoxLayout(feedback_group)
 
         self.lbl_feudal_status = QLabel("Feudal: —")
@@ -405,7 +460,8 @@ class PracticeTab(QWidget):
         right.addWidget(feedback_group)
 
         # Milestone log
-        milestone_group = QGroupBox("Milestone Log")
+        self.milestone_group = QGroupBox("Milestone Log")
+        milestone_group = self.milestone_group
         milestone_layout = QVBoxLayout(milestone_group)
 
         self.milestone_list = QListWidget()
@@ -423,7 +479,8 @@ class PracticeTab(QWidget):
         right.addWidget(milestone_group)
 
         # Step counter
-        steps_group = QGroupBox("Steps Completed")
+        self.steps_group = QGroupBox("Steps Completed")
+        steps_group = self.steps_group
         steps_layout = QHBoxLayout(steps_group)
         self.sp_steps_done = QSpinBox()
         self.sp_steps_done.setRange(0, 200)
@@ -435,7 +492,8 @@ class PracticeTab(QWidget):
         right.addWidget(steps_group)
 
         # Personal best
-        pb_group = QGroupBox("Personal Bests")
+        self.pb_group = QGroupBox("Personal Bests")
+        pb_group = self.pb_group
         pb_layout = QFormLayout(pb_group)
         self.lbl_pb_feudal = QLabel("—")
         self.lbl_pb_castle = QLabel("—")
@@ -446,7 +504,56 @@ class PracticeTab(QWidget):
         right.addWidget(pb_group)
 
         right.addStretch()
-        root.addLayout(right, stretch=1)
+        root.addWidget(self.right_panel, stretch=1)
+
+        self._advanced_visible = not settings.simple_mode
+        self._apply_simple_mode()
+
+    def _update_guidance(self) -> None:
+        if settings.simple_mode:
+            self.lbl_guidance.setText(
+                "Simple mode — just pick a build, use the overlay, then Import Last Game. "
+                "Everything else is optional."
+            )
+        else:
+            self.lbl_guidance.setText(
+                "Full mode — all trackers and logs are visible. "
+                "Switch back in Settings if this feels like too much."
+            )
+
+    def _toggle_advanced(self) -> None:
+        self._advanced_visible = not self._advanced_visible
+        self._apply_simple_mode()
+
+    def apply_simple_mode(self) -> None:
+        """Called when settings change."""
+        if settings.simple_mode:
+            self._advanced_visible = False
+        self._update_guidance()
+        self._apply_simple_mode()
+
+    def _apply_simple_mode(self) -> None:
+        if settings.simple_mode:
+            show_adv = self._advanced_visible
+            self.btn_toggle_advanced.setVisible(True)
+            self.btn_toggle_advanced.setText(
+                "Hide extra options ▴" if show_adv else "Show all options ▾"
+            )
+        else:
+            show_adv = True
+            self.btn_toggle_advanced.setVisible(False)
+
+        for w in (
+            self.resource_tracker, self.quick_milestone_row,
+            self.feedback_group, self.milestone_group, self.steps_group,
+            self.pb_group, self.right_panel,
+        ):
+            w.setVisible(show_adv)
+        self.replay_group.setVisible(True)
+
+        # Session notes + save always visible in left column
+        self.ed_session_notes.setVisible(True)
+        self.btn_save.setVisible(True)
 
     # ── Data ──────────────────────────────────────────────────────────────
 
@@ -479,6 +586,17 @@ class PracticeTab(QWidget):
                 break
         self.lbl_total_steps.setText(f"/ {bo.step_count} total")
         self._update_personal_bests()
+        if bo.id:
+            settings.last_practice_bo_id = bo.id
+            settings.save()
+
+    def load_build_order_by_id(self, bo_id) -> None:
+        if bo_id is None:
+            return
+        from ..build_orders.manager import get_build_order
+        bo = get_build_order(bo_id)
+        if bo:
+            self.load_build_order(bo)
 
     def _on_bo_changed(self) -> None:
         bo_id = self.cb_bo.currentData()
@@ -527,7 +645,7 @@ class PracticeTab(QWidget):
         Prompt to import when a newer replay appears (e.g. after a finished game).
         Called on app startup and when switching to the Practice tab.
         """
-        if not settings.auto_prompt_new_replay:
+        if settings.auto_detect_sessions or not settings.auto_prompt_new_replay:
             return
 
         from ..replay.parser import get_latest_replay
@@ -614,7 +732,52 @@ class PracticeTab(QWidget):
             f"{timing_str}{conf}"
         )
         self._auto_fill_from_replay(analysis)
+        if settings.auto_postgame_coach:
+            self._run_postgame_coach(path)
         logger.info("Replay loaded for practice: %s", path)
+
+    def _run_postgame_coach(self, replay_path: str) -> None:
+        """Background post-game coach pipeline after replay import."""
+        civ = self._replay_analysis.civ if self._replay_analysis else "Any"
+        strategy = self._selected_bo.strategy if self._selected_bo else ""
+        bo_id = self._selected_bo.id if self._selected_bo else None
+        bo_name = self._selected_bo.name if self._selected_bo else ""
+
+        self._postgame_thread = QThread(self)
+        self._postgame_worker = _PostGameCoachWorker(
+            replay_path, civ, strategy, bo_id, bo_name,
+        )
+        self._postgame_worker.moveToThread(self._postgame_thread)
+        self._postgame_thread.started.connect(self._postgame_worker.run)
+        self._postgame_worker.finished.connect(self._on_postgame_coach_done)
+        self._postgame_worker.error.connect(
+            lambda e: logger.warning("Post-game coach error: %s", e)
+        )
+        self._postgame_worker.finished.connect(self._postgame_thread.quit)
+        self._postgame_worker.error.connect(self._postgame_thread.quit)
+        self._postgame_thread.start()
+
+    def _on_postgame_coach_done(self, result) -> None:
+        """Show post-game coach report and offer to pin overlay alert."""
+        from ..ai_coach.postgame import pin_overlay_alert
+
+        dlg = _CoachingDialog(self)
+        dlg.setWindowTitle("Post-Game Coach — Hera Analysis")
+        dlg.set_result(result.report)
+        dlg.show()
+
+        if result.overlay_alert:
+            reply = QMessageBox.question(
+                self, "Pin to Overlay?",
+                f"Show this reminder on your overlay next match?\n\n"
+                f"\"{result.overlay_alert}\"",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                bo_id = self._selected_bo.id if self._selected_bo else None
+                pin_overlay_alert(result.overlay_alert, bo_id)
+                if self.overlay and self._selected_bo:
+                    self.overlay._show_coach_alert(self._selected_bo)
 
     def _auto_fill_from_replay(self, analysis) -> None:
         """Pre-fill session fields from replay analysis data."""

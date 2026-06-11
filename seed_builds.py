@@ -8,6 +8,7 @@ sys.path.insert(0, ".")
 from src.core.database import init_db
 from src.build_orders.models import BuildOrder, BuildStep
 from src.build_orders.manager import import_and_save, get_all_build_orders, delete_build_order
+from src.build_orders.detailed_builds import britons_archer_rush_detailed, fast_castle_any_detailed
 
 init_db()
 
@@ -158,42 +159,8 @@ BUILDS.append(BuildOrder(
     ],
 ))
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. Fast Castle into Knights
-# ─────────────────────────────────────────────────────────────────────────────
-BUILDS.append(BuildOrder(
-    name="Fast Castle into Knights",
-    civ="Any",
-    strategy="Fast Castle",
-    difficulty="Medium",
-    author="Standard Meta",
-    external_id="fast-castle-knights",
-    source_url="https://www.buildorderguide.com",
-    tags=["fast castle", "knight", "fc", "castle", "meta"],
-    notes="Skip Feudal military and boom straight to Castle Age Knights. Feudal around 10–11 min, Castle at ~15–16 min.",
-    steps=[
-        step(1,  "6 vills → sheep", "0:00", 4, food=6),
-        step(2,  "7th vill → house → sheep", "0:30", 7),
-        step(3,  "8th–10th vill → sheep", "1:30", 10),
-        step(4,  "11th–13th vill → Lumber Camp → wood", "2:30", 13, wood=3),
-        step(5,  "14th vill → Mill → berries", "3:30", 14),
-        step(6,  "15th–17th vill → berries", "4:00", 17),
-        step(7,  "18th–21st vill → wood (bring wood to 7–8 total)", "5:00", 21, wood=8),
-        step(8,  "22nd–25th vill → gold (4 on gold)", "6:00", 25, gold=4),
-        step(9,  "Research Horse Collar + Double-Bit Axe", "6:30", 25),
-        step(10, "Click Feudal Age at ~21–23 pop", "8:00", 25,
-             notes="You want ~500F 800F — only build Barracks, no military"),
-        step(11, "Build Barracks (required) during Feudal up. No military.", "8:00", 25),
-        step(12, "Reach Feudal. Click Castle Age immediately (800F/200G)", "10:00", 26,
-             age="Feudal", notes="Do NOT build an Archery Range or Stable — fast Castle only"),
-        step(13, "During Castle up: build 2 Stables, send vills to gold (7+ on gold)", "10:00", 27,
-             gold=7, notes="Add more farms during transition"),
-        step(14, "Reach Castle. Queue 4–6 Knights from 2 Stables.", "15:30", 30,
-             age="Castle", notes="Research Bloodlines + Forging ASAP"),
-        step(15, "Add 3rd Stable. Begin adding Trebuchet support.", "17:00", 35,
-             notes="Aim for 6+ Knights on field before Imperial"),
-    ],
-))
+# 5. Fast Castle (Any) — 27 detailed micro-steps
+BUILDS.append(fast_castle_any_detailed())
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. Economic Boom (Fast Castle → Boom)
@@ -297,41 +264,8 @@ BUILDS.append(BuildOrder(
     ],
 ))
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 9. Britons Archer Rush
-# ─────────────────────────────────────────────────────────────────────────────
-BUILDS.append(BuildOrder(
-    name="Britons Archer Rush",
-    civ="Britons",
-    strategy="Archer Rush",
-    difficulty="Medium",
-    author="Standard Meta",
-    external_id="britons-archer-rush",
-    source_url="https://www.buildorderguide.com",
-    tags=["archer", "rush", "britons", "feudal", "meta"],
-    notes="Britons Archery Ranges work 20% faster in Castle Age+. Stack archers in Feudal, dominate through Castle. Best archer civ.",
-    steps=[
-        step(1,  "6 vills → sheep", "0:00", 4, food=6),
-        step(2,  "7th vill → house → sheep", "0:30", 7),
-        step(3,  "8th–10th vill → sheep", "1:30", 10),
-        step(4,  "11th–14th vill → Lumber Camp → wood", "2:30", 14, wood=4),
-        step(5,  "15th vill → Mill → berries", "3:45", 15),
-        step(6,  "16th–18th vill → berries", "4:30", 18),
-        step(7,  "19th–21st vill → gold (3 on gold)", "5:30", 21, gold=3),
-        step(8,  "22nd vill → wood. Double-Bit Axe when affordable.", "6:00", 22, wood=5),
-        step(9,  "Click Feudal at ~500F / 22 pop", "7:30", 22,
-             notes="Aim for 9:30–10:00 Feudal"),
-        step(10, "Build Barracks + Archery Range. Archery Range first after Barracks.", "7:30", 22,
-             notes="2 vills build; return to resource after"),
-        step(11, "Reach Feudal. Start pumping Archers. Fletching ASAP.", "9:30", 24,
-             age="Feudal", notes="Britons thumb ring + fletching = insane range"),
-        step(12, "2nd Archery Range at 10–12 archers.", "11:00", 26,
-             notes="Keep 4–5 vills on gold for 2 constant ranges"),
-        step(13, "Click Castle at 800F/200G (after ~15 archers)", "13:00", 28),
-        step(14, "Reach Castle. Britons ranges 20% faster → spam Crossbowmen.", "16:00", 32,
-             age="Castle", notes="Research Bodkin Arrow for +1 range. Research Crossbow upgrade."),
-    ],
-))
+# 9. Britons Archer Rush — 34 detailed micro-steps
+BUILDS.append(britons_archer_rush_detailed())
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 10. Franks Fast Castle + Knights

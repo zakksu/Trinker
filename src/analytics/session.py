@@ -52,6 +52,14 @@ class Session:
     milestones:        list[Milestone] = field(default_factory=list)
     id:                Optional[int] = None
     created_at:        str           = field(default_factory=now_iso)
+    # 2.0 replay profile fields
+    civ:               str           = ""
+    map_name:          str           = ""
+    game_mode:         str           = "unknown"
+    data_quality:      str           = "unknown"
+    eapm:              Optional[float] = None
+    player_name:       str           = ""
+    insights_json:     str           = "{}"
 
 
 # ---------------------------------------------------------------------------
@@ -72,8 +80,9 @@ def save_session(session: Session) -> Session:
                    (build_order_id, date, duration_sec, feudal_time_sec, castle_time_sec,
                     imperial_time_sec, final_pop, food_at_feudal, wood_at_feudal,
                     gold_at_feudal, stone_at_feudal, result, accuracy_pct, notes,
-                    mistakes_json, replay_path, created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    mistakes_json, replay_path, created_at,
+                    civ, map_name, game_mode, data_quality, eapm, player_name, insights_json)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     session.build_order_id, session.date, session.duration_sec,
                     session.feudal_time_sec, session.castle_time_sec,
@@ -82,6 +91,9 @@ def save_session(session: Session) -> Session:
                     session.gold_at_feudal, session.stone_at_feudal,
                     session.result, session.accuracy_pct, session.notes,
                     mistakes_json, session.replay_path, session.created_at,
+                    session.civ, session.map_name, session.game_mode,
+                    session.data_quality, session.eapm, session.player_name,
+                    session.insights_json,
                 ),
             )
             session.id = cur.lastrowid
@@ -210,6 +222,33 @@ def get_session(session_id: int) -> Optional[Session]:
 # Aggregated analytics queries
 # ---------------------------------------------------------------------------
 
+# Only average sessions with plausible data (2.0 quality gate)
+_QUALITY_SQL = """
+    AND (feudal_time_sec IS NULL OR feudal_time_sec >= 420)
+    AND (castle_time_sec IS NULL OR castle_time_sec >= 660)
+    AND (duration_sec IS NULL OR duration_sec = 0 OR (duration_sec >= 300 AND duration_sec <= 7200))
+    AND (game_mode IS NULL OR game_mode != 'sp')
+    AND (replay_path IS NULL OR replay_path NOT LIKE '%SP Replay%')
+"""
+
+
+def purge_low_quality_sessions() -> int:
+    """Remove polluted bulk-import and impossible-timing sessions."""
+    with db_conn() as conn:
+        cur = conn.execute(
+            """DELETE FROM sessions WHERE
+               notes LIKE '%Bulk import%'
+               OR (feudal_time_sec IS NOT NULL AND feudal_time_sec < 420)
+               OR (castle_time_sec IS NOT NULL AND castle_time_sec < 660)
+               OR duration_sec = 7200
+               OR replay_path LIKE '%SP Replay%'
+               OR game_mode = 'sp'"""
+        )
+        deleted = cur.rowcount
+    logger.info("Purged %d low-quality sessions.", deleted)
+    return deleted
+
+
 def get_summary_stats(build_order_id: Optional[int] = None) -> dict:
     """
     Return aggregated stats for the analytics dashboard.
@@ -220,8 +259,12 @@ def get_summary_stats(build_order_id: Optional[int] = None) -> dict:
       best_feudal_sec, best_castle_sec,
       avg_accuracy, practice_days
     """
-    bo_filter = "WHERE build_order_id = ?" if build_order_id else ""
-    params = (build_order_id,) if build_order_id else ()
+    if build_order_id:
+        where = f"WHERE build_order_id = ? {_QUALITY_SQL}"
+        params: tuple = (build_order_id,)
+    else:
+        where = f"WHERE 1=1 {_QUALITY_SQL}"
+        params = ()
 
     with db_conn() as conn:
         row = conn.execute(
@@ -236,7 +279,7 @@ def get_summary_stats(build_order_id: Optional[int] = None) -> dict:
                 MIN(castle_time_sec)                  AS best_castle_sec,
                 AVG(accuracy_pct)                     AS avg_accuracy,
                 COUNT(DISTINCT date)                  AS practice_days
-            FROM sessions {bo_filter}""",
+            FROM sessions {where}""",
             params,
         ).fetchone()
 
@@ -255,12 +298,12 @@ def get_accuracy_trend(build_order_id: Optional[int] = None, last_n: int = 30) -
     Each dict has: date, accuracy_pct, session_id.
     """
     bo_filter = "AND build_order_id = ?" if build_order_id else ""
-    params = [build_order_id] * bool(build_order_id) + [last_n]
+    params: tuple = (build_order_id, last_n) if build_order_id else (last_n,)
     with db_conn() as conn:
         rows = conn.execute(
             f"""SELECT id AS session_id, date, accuracy_pct
                 FROM sessions
-                WHERE accuracy_pct IS NOT NULL {bo_filter}
+                WHERE accuracy_pct IS NOT NULL {_QUALITY_SQL} {bo_filter}
                 ORDER BY created_at DESC LIMIT ?""",
             params,
         ).fetchall()
@@ -273,12 +316,12 @@ def get_feudal_time_trend(build_order_id: Optional[int] = None, last_n: int = 30
     Each dict has: date, feudal_time_sec, session_id.
     """
     bo_filter = "AND build_order_id = ?" if build_order_id else ""
-    params = [build_order_id] * bool(build_order_id) + [last_n]
+    params: tuple = (build_order_id, last_n) if build_order_id else (last_n,)
     with db_conn() as conn:
         rows = conn.execute(
             f"""SELECT id AS session_id, date, feudal_time_sec
                 FROM sessions
-                WHERE feudal_time_sec IS NOT NULL {bo_filter}
+                WHERE feudal_time_sec IS NOT NULL {_QUALITY_SQL} {bo_filter}
                 ORDER BY created_at DESC LIMIT ?""",
             params,
         ).fetchall()
@@ -342,4 +385,11 @@ def _row_to_session(row: dict) -> Session:
         mistakes_json=json_loads(row.get("mistakes_json", "[]")),
         replay_path=row.get("replay_path"),
         created_at=row.get("created_at", ""),
+        civ=row.get("civ") or "",
+        map_name=row.get("map_name") or "",
+        game_mode=row.get("game_mode") or "unknown",
+        data_quality=row.get("data_quality") or "unknown",
+        eapm=row.get("eapm"),
+        player_name=row.get("player_name") or "",
+        insights_json=row.get("insights_json") or "{}",
     )

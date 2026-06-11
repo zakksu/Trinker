@@ -128,11 +128,35 @@ def db_conn() -> Generator[sqlite3.Connection, None, None]:
 # Schema initialization & seeding
 # ---------------------------------------------------------------------------
 
+V2_SESSION_COLUMNS = [
+    ("civ", "TEXT DEFAULT ''"),
+    ("map_name", "TEXT DEFAULT ''"),
+    ("game_mode", "TEXT DEFAULT 'unknown'"),
+    ("data_quality", "TEXT DEFAULT 'unknown'"),
+    ("eapm", "REAL"),
+    ("player_name", "TEXT DEFAULT ''"),
+    ("insights_json", "TEXT DEFAULT '{}'"),
+]
+
+
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    """Add 2.0 session columns if missing (non-destructive)."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    added = 0
+    for col, typedef in V2_SESSION_COLUMNS:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {typedef}")
+            added += 1
+    if added:
+        logger.info("DB migrated to v2: added %d session column(s).", added)
+
+
 def init_db() -> None:
     """Create all tables and seed reference data if first run."""
     logger.info("Initializing database at %s", DB_PATH)
     with db_conn() as conn:
         conn.executescript(SCHEMA_SQL)
+        _migrate_v2(conn)
 
     _seed_ideal_timings()
     logger.info("Database ready.")

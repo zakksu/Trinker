@@ -153,12 +153,8 @@ class ReplayParser:
         info.game_version = self._data[idx:end].decode("ascii", errors="replace").strip()
 
     def _parse_duration(self, info: ReplayInfo) -> None:
-        """
-        Estimate game duration from file size.
-        True duration requires decoding the full event stream (out of scope here).
-        Rough heuristic: ~4.5 bytes per game-second at 1x speed.
-        """
-        info.duration_sec = int(len(self._data) / 4.5)
+        """Duration requires mgz/event parse — do not guess from file size."""
+        info.duration_sec = 0
 
     def _parse_map(self, info: ReplayInfo) -> None:
         """Try to read the map type ID from a known offset region."""
