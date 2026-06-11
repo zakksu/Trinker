@@ -39,6 +39,14 @@ _STATUS_COLORS = {
 }
 
 
+def _fmt_sec(sec) -> str:
+    """Format seconds (int or float from DB/JSON) as M:SS."""
+    if sec is None:
+        return "—"
+    sec = int(round(float(sec)))
+    return f"{sec // 60}:{sec % 60:02d}"
+
+
 class _DashCard(QFrame):
     def __init__(self, title: str, value: str = "—", color: str = "#3498db", parent=None):
         super().__init__(parent)
@@ -319,9 +327,7 @@ class DashboardTab(QWidget):
         stats = get_summary_stats()
         self.card_sessions.set_value(str(stats.get("total_sessions", 0)))
         feudal = stats.get("avg_feudal_sec")
-        self.card_feudal.set_value(
-            f"{feudal // 60}:{feudal % 60:02d}" if feudal else "—"
-        )
+        self.card_feudal.set_value(_fmt_sec(feudal) if feudal else "—")
 
         latest = get_latest_replay_analysis()
         feudal_sec = castle_sec = imperial_sec = None
@@ -334,7 +340,7 @@ class DashboardTab(QWidget):
             feudal_sec = data.get("feudal_time_sec")
             castle_sec = data.get("castle_time_sec")
             imperial_sec = data.get("imperial_time_sec")
-            feudal_s = f"{feudal_sec // 60}:{feudal_sec % 60:02d}" if feudal_sec else "—"
+            feudal_s = _fmt_sec(feudal_sec)
             self.lbl_last_game.setText(
                 f"{Path(latest.replay_path).name}\n"
                 f"Civ: {latest.civ}  |  Map: {latest.map_name or '—'}  |  "

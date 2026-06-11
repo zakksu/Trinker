@@ -47,6 +47,15 @@ def save_replay_analysis(
         "coach_context": profile.coach_context(),
     }, ensure_ascii=False)
 
+    if session_id is not None:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if not row:
+                session_id = None
+
     with db_conn() as conn:
         conn.execute(
             """INSERT INTO replay_analyses

@@ -69,7 +69,7 @@ def _query_ollama(prompt: str) -> str:
 
 
 def _query_ollama_chat(system: str, user: str) -> str:
-    """Chat-style Ollama call with system + user messages."""
+    """Chat-style Ollama call; falls back to /api/generate on older Ollama builds."""
     payload = {
         "model": settings.ollama_model,
         "messages": [
@@ -84,6 +84,9 @@ def _query_ollama_chat(system: str, user: str) -> str:
         json=payload,
         timeout=120,
     )
+    if resp.status_code == 404:
+        logger.debug("Ollama /api/chat not found — falling back to /api/generate")
+        return _query_ollama(f"{system}\n\n{user}")
     resp.raise_for_status()
     return resp.json().get("message", {}).get("content", "").strip()
 
