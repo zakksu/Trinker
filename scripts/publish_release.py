@@ -59,15 +59,22 @@ def main() -> int:
     }
     api = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
 
-    notes = """## TRINKER v2.0.0
+    notes = f"""## TRINKER {tag}
 
-### What's new
+### What's new in v2.0
+- **Dashboard** — last game stats, build-order comparison, Ask Coach chat
 - **Start Here** workflow — pick a build, show overlay, play
-- **Tabbed overlay** — Steps, Resources, Tips (smaller, always-on-top)
-- **Auto-detect games** — SP, MP, and team games save to Analytics automatically
-- **Overlay pause sync** — timer pauses when AoE2 is paused
-- **Ollama auto-enable** — AI coach turns on when Ollama is running
-- **Validated analytics pipeline** — cleaner session data (v2 DB)
+- **Tabbed overlay** — Steps, Resources, Tips (compact, always-on-top)
+- **Auto-detect games** — SP/MP replays save to Analytics automatically
+- **AI Coach** — structured prompts, post-game reports, chat on Dashboard
+- **Onboarding wizard**, build-order editor, theme + hotkey settings
+- **aoe2.gg match import** (Steam ID) with local replay auto-import
+- **CI/CD** — GitHub Actions tests + pre-commit
+
+### Bug fixes
+- Dashboard no longer crashes on average feudal time formatting
+- Ollama coach falls back when `/api/chat` is unavailable
+- Replay analysis saves cleanly when session link is invalid
 
 ### For new users
 1. Download **TRINKER.exe** below
