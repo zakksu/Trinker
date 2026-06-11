@@ -1,4 +1,5 @@
 """Tests for replay timing validation."""
+
 import sys
 from pathlib import Path
 

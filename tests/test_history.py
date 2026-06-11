@@ -1,4 +1,5 @@
 """Tests for historical analysis."""
+
 import sys
 from pathlib import Path
 

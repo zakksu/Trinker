@@ -3,7 +3,6 @@ TRINKER - Per-step ideal timing calculator for overlay progress bars.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from .models import BuildOrder, BuildStep
 
@@ -11,9 +10,10 @@ from .models import BuildOrder, BuildStep
 @dataclass
 class StepTimingState:
     """Computed timing state for the current build step."""
-    progress_pct: float          # 0–100 how far through this step window
-    remaining_sec: int           # seconds until ideal step deadline
-    status: str                  # green | yellow | red | neutral
+
+    progress_pct: float  # 0–100 how far through this step window
+    remaining_sec: int  # seconds until ideal step deadline
+    status: str  # green | yellow | red | neutral
     target_time_str: str
     message: str
 
@@ -41,7 +41,10 @@ def compute_step_timing(
 
     if target <= 0:
         return StepTimingState(
-            0, 0, "neutral", step.time_str or "—",
+            0,
+            0,
+            "neutral",
+            step.time_str or "—",
             "No timing benchmark for this step",
         )
 

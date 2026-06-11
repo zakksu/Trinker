@@ -10,73 +10,56 @@ Rich data visualization for practice session history:
 """
 
 from datetime import date, timedelta
-from typing import Optional
 
-from PySide6.QtCore import Qt, QThread, QObject, Signal
+from PySide6.QtCore import QDate, QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QGroupBox, QFormLayout, QTabWidget, QTextEdit, QFrame,
-    QDateEdit, QCheckBox, QSizePolicy, QScrollArea,
+    QComboBox,
+    QDateEdit,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import QDate
 
+from ..analytics.history import build_historical_summary, get_recurring_themes
 from ..analytics.session import (
-    get_sessions, get_summary_stats, get_feudal_time_trend,
-    get_accuracy_trend, get_most_practiced_builds, get_activity_heatmap,
     delete_session,
+    get_accuracy_trend,
+    get_activity_heatmap,
+    get_feudal_time_trend,
+    get_most_practiced_builds,
+    get_sessions,
+    get_summary_stats,
 )
-from ..analytics.history import get_recurring_themes, build_historical_summary
+from .theme import get_tokens, stylesheet_tab_panel, stylesheet_table
+
+PALETTE = ["#3498db", "#2ecc71", "#e74c3c", "#f1c40f", "#9b59b6", "#1abc9c"]
 from ..analytics.exporter import export_sessions_csv, export_sessions_json
 from ..build_orders.manager import get_all_build_orders
-from ..core.logger import logger
 
 try:
     import matplotlib
-    matplotlib.use("Qt5Agg" if False else "Agg")   # use Agg backend, embed via QLabel
-    import matplotlib.pyplot as plt
-    import matplotlib.dates as mdates
-    from matplotlib.figure import Figure
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    matplotlib.use("Qt5Agg" if False else "Agg")  # use Agg backend, embed via QLabel
     import io
-    from PySide6.QtGui import QPixmap, QImage
+
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+    from PySide6.QtGui import QImage, QPixmap
+
     _MPL_OK = True
 except Exception:
     _MPL_OK = False
-
-STYLE = """
-QWidget { background: #111113; color: #ecf0f1; }
-QTableWidget {
-    background: #15151a; border: 1px solid #2c2c2e;
-    gridline-color: #1e1e22; border-radius: 6px;
-}
-QTableWidget::item { padding: 5px 8px; }
-QTableWidget::item:selected { background: #1c3a5c; }
-QHeaderView::section {
-    background: #1e1e22; color: #7f8c8d;
-    border: none; padding: 5px 8px; font-size: 11px; letter-spacing: 1px;
-}
-QGroupBox {
-    border: 1px solid #2c2c2e; border-radius: 8px;
-    margin-top: 10px; padding: 10px 8px 8px 8px;
-}
-QGroupBox::title { color: #7f8c8d; padding: 0 8px; font-size: 11px; letter-spacing: 1px; }
-QComboBox, QDateEdit {
-    background: #1e1e22; border: 1px solid #2c2c2e;
-    border-radius: 6px; padding: 4px 8px; color: #ecf0f1;
-}
-QPushButton {
-    background: #1e1e22; border: 1px solid #2c2c2e;
-    border-radius: 6px; padding: 6px 14px; color: #ecf0f1;
-}
-QPushButton:hover { background: #25252c; border-color: #3498db; }
-QTabWidget::pane { border: 1px solid #2c2c2e; border-radius: 6px; }
-QTabBar::tab { background: #1e1e22; color: #7f8c8d; padding: 8px 16px; border-radius: 4px; margin-right: 2px; }
-QTabBar::tab:selected { background: #1c3a5c; color: #3498db; }
-QTextEdit { background: #1a1a20; border: 1px solid #2c2c2e; border-radius: 6px; color: #ecf0f1; }
-"""
-
-PALETTE = ["#3498db", "#2ecc71", "#e74c3c", "#f1c40f", "#9b59b6", "#1abc9c"]
 
 
 def _sec_to_mmss(sec) -> str:
@@ -96,13 +79,13 @@ def _pct(val) -> str:
 # Matplotlib chart rendering helper (renders to QPixmap, embeds in QLabel)
 # ---------------------------------------------------------------------------
 
+
 def _render_chart(fig: "Figure") -> "QPixmap":
     """Render a matplotlib figure to a QPixmap for display in Qt."""
     canvas = FigureCanvasAgg(fig)
     buf = io.BytesIO()
     canvas.draw()
-    fig.savefig(buf, format="png", bbox_inches="tight",
-                facecolor=fig.get_facecolor(), dpi=100)
+    fig.savefig(buf, format="png", bbox_inches="tight", facecolor=fig.get_facecolor(), dpi=100)
     buf.seek(0)
     data = buf.read()
     qimg = QImage.fromData(data)
@@ -112,7 +95,7 @@ def _render_chart(fig: "Figure") -> "QPixmap":
 def _dark_fig(width=8, height=3.5):
     """Return a matplotlib Figure with dark background."""
     fig = Figure(figsize=(width, height), facecolor="#111113")
-    ax  = fig.add_subplot(111, facecolor="#1a1a20")
+    ax = fig.add_subplot(111, facecolor="#1a1a20")
     ax.tick_params(colors="#7f8c8d")
     ax.spines[:].set_color("#2c2c2e")
     ax.xaxis.label.set_color("#7f8c8d")
@@ -125,21 +108,24 @@ def _dark_fig(width=8, height=3.5):
 # Stat card widget
 # ---------------------------------------------------------------------------
 
+
 class StatCard(QFrame):
     def __init__(self, title: str, value: str = "—", color: str = "#3498db", parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"""
-            QFrame {{
+        self.setStyleSheet("""
+            QFrame {
                 background: #1a1a20; border: 1px solid #2c2c2e;
                 border-radius: 10px; padding: 8px;
-            }}
+            }
         """)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(4)
 
         self.lbl_val = QLabel(value)
-        self.lbl_val.setStyleSheet(f"color: {color}; font-size: 28px; font-weight: bold; font-family: monospace;")
+        self.lbl_val.setStyleSheet(
+            f"color: {color}; font-size: 28px; font-weight: bold; font-family: monospace;"
+        )
         self.lbl_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.lbl_title = QLabel(title)
@@ -157,18 +143,20 @@ class StatCard(QFrame):
 # AI recommendation worker
 # ---------------------------------------------------------------------------
 
+
 class _AIWorker(QObject):
     finished = Signal(str)
-    error    = Signal(str)
+    error = Signal(str)
 
     def __init__(self, stats: dict, mistakes: list):
         super().__init__()
-        self.stats   = stats
+        self.stats = stats
         self.mistakes = mistakes
 
     def run(self) -> None:
         try:
             from ..ai_coach.coach import get_build_recommendations
+
             result = get_build_recommendations(self.stats, self.mistakes)
             self.finished.emit(result)
         except Exception as exc:
@@ -179,14 +167,19 @@ class _AIWorker(QObject):
 # Analytics Tab
 # ---------------------------------------------------------------------------
 
+
 class AnalyticsTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(STYLE)
         self._ai_thread = None
         self._ai_worker = None
         self._setup_ui()
+        self.apply_theme()
         self.refresh()
+
+    def apply_theme(self, theme_name: str | None = None) -> None:
+        t = get_tokens(theme_name)
+        self.setStyleSheet(stylesheet_tab_panel(t) + stylesheet_table(t))
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -225,21 +218,29 @@ class AnalyticsTab(QWidget):
         filter_row.addWidget(btn_refresh)
         layout.addLayout(filter_row)
 
-        hint = QLabel("v2.0: stats use quality-filtered MP sessions only — no fake 0:23 feudal times.")
+        hint = QLabel(
+            "v2.0: stats use quality-filtered MP sessions only — no fake 0:23 feudal times."
+        )
         hint.setStyleSheet("color: #5a6a7a; font-size: 10px;")
         layout.addWidget(hint)
 
         # Stat cards row
         cards_row = QHBoxLayout()
         cards_row.setSpacing(10)
-        self.card_sessions  = StatCard("SESSIONS", "0", "#3498db")
-        self.card_winrate   = StatCard("WIN RATE", "—", "#2ecc71")
-        self.card_feudal    = StatCard("AVG FEUDAL", "—", "#e67e22")
-        self.card_castle    = StatCard("AVG CASTLE", "—", "#9b59b6")
-        self.card_accuracy  = StatCard("AVG ACCURACY", "—", "#1abc9c")
-        self.card_days      = StatCard("PRACTICE DAYS", "0", "#f1c40f")
-        for card in [self.card_sessions, self.card_winrate, self.card_feudal,
-                     self.card_castle, self.card_accuracy, self.card_days]:
+        self.card_sessions = StatCard("SESSIONS", "0", "#3498db")
+        self.card_winrate = StatCard("WIN RATE", "—", "#2ecc71")
+        self.card_feudal = StatCard("AVG FEUDAL", "—", "#e67e22")
+        self.card_castle = StatCard("AVG CASTLE", "—", "#9b59b6")
+        self.card_accuracy = StatCard("AVG ACCURACY", "—", "#1abc9c")
+        self.card_days = StatCard("PRACTICE DAYS", "0", "#f1c40f")
+        for card in [
+            self.card_sessions,
+            self.card_winrate,
+            self.card_feudal,
+            self.card_castle,
+            self.card_accuracy,
+            self.card_days,
+        ]:
             cards_row.addWidget(card)
         layout.addLayout(cards_row)
 
@@ -283,11 +284,11 @@ class AnalyticsTab(QWidget):
         filter_row.addWidget(btn_apply)
         filter_row.addStretch()
 
-        btn_csv  = QPushButton("⬇ CSV")
+        btn_csv = QPushButton("⬇ CSV")
         btn_csv.clicked.connect(lambda: self._export("csv"))
         btn_json = QPushButton("⬇ JSON")
         btn_json.clicked.connect(lambda: self._export("json"))
-        btn_del  = QPushButton("🗑 Delete")
+        btn_del = QPushButton("🗑 Delete")
         btn_del.setStyleSheet("QPushButton { color: #e74c3c; }")
         btn_del.clicked.connect(self._on_delete_session)
         filter_row.addWidget(btn_csv)
@@ -297,11 +298,24 @@ class AnalyticsTab(QWidget):
 
         # Table
         self.history_table = QTableWidget(0, 8)
-        self.history_table.setHorizontalHeaderLabels([
-            "Date", "Civ", "Build Order", "Feudal", "Castle", "Quality", "Result", "Notes"
-        ])
-        self.history_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.history_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
+        self.history_table.setHorizontalHeaderLabels(
+            [
+                "Date",
+                "Civ",
+                "Build Order",
+                "Feudal",
+                "Castle",
+                "Quality",
+                "Result",
+                "Notes",
+            ]
+        )
+        self.history_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.history_table.horizontalHeader().setSectionResizeMode(
+            7, QHeaderView.ResizeMode.Stretch
+        )
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         layout.addWidget(self.history_table)
@@ -329,7 +343,7 @@ class AnalyticsTab(QWidget):
         chart_layout = QVBoxLayout(chart_widget)
         chart_layout.setSpacing(16)
 
-        self.lbl_feudal_chart  = QLabel("Charts will appear after practice sessions are recorded.")
+        self.lbl_feudal_chart = QLabel("Charts will appear after practice sessions are recorded.")
         self.lbl_feudal_chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_feudal_chart.setStyleSheet("color: #7f8c8d;")
         self.lbl_feudal_chart.setMinimumHeight(220)
@@ -359,7 +373,9 @@ class AnalyticsTab(QWidget):
         self.leaderboard_table.setHorizontalHeaderLabels(
             ["Build Order", "Civ", "Sessions", "Avg Accuracy", "Best Feudal"]
         )
-        self.leaderboard_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.leaderboard_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
         self.leaderboard_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         layout.addWidget(self.leaderboard_table)
         layout.addStretch()
@@ -399,7 +415,9 @@ class AnalyticsTab(QWidget):
         layout.addWidget(info)
 
         btn_ask = QPushButton("🤖 Ask AI Coach for Recommendations")
-        btn_ask.setStyleSheet("QPushButton { background: #1c3a5c; color: #3498db; border: 1px solid #2c5a8c; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 13px; }")
+        btn_ask.setStyleSheet(
+            "QPushButton { background: #1c3a5c; color: #3498db; border: 1px solid #2c5a8c; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 13px; }"
+        )
         btn_ask.clicked.connect(self._on_ai_recommend)
         layout.addWidget(btn_ask)
 
@@ -423,9 +441,7 @@ class AnalyticsTab(QWidget):
     def _refresh_patterns(self) -> None:
         themes = get_recurring_themes()
         if themes:
-            self.lbl_themes.setText(
-                "  ·  ".join(f"{t} ({c})" for t, c in themes[:8])
-            )
+            self.lbl_themes.setText("  ·  ".join(f"{t} ({c})" for t, c in themes[:8]))
         else:
             self.lbl_themes.setText("No patterns yet — save sessions with notes.")
 
@@ -433,6 +449,7 @@ class AnalyticsTab(QWidget):
         civ = "Any"
         if bo_id:
             from ..build_orders.manager import get_build_order
+
             bo = get_build_order(bo_id)
             if bo:
                 civ = bo.civ
@@ -478,26 +495,38 @@ class AnalyticsTab(QWidget):
         today = date.today()
         lines = []
         for week_offset in range(16, -1, -1):
-            week_dates = [today - timedelta(days=today.weekday()) - timedelta(weeks=week_offset) + timedelta(days=d) for d in range(7)]
+            week_dates = [
+                today
+                - timedelta(days=today.weekday())
+                - timedelta(weeks=week_offset)
+                + timedelta(days=d)
+                for d in range(7)
+            ]
             week_str = ""
             for d in week_dates:
                 cnt = data.get(d.isoformat(), 0)
-                if cnt == 0:   char = "░"
-                elif cnt == 1: char = "▒"
-                elif cnt <= 3: char = "▓"
-                else:          char = "█"
+                if cnt == 0:
+                    char = "░"
+                elif cnt == 1:
+                    char = "▒"
+                elif cnt <= 3:
+                    char = "▓"
+                else:
+                    char = "█"
                 week_str += char
             lines.append(week_str)
 
         heatmap_text = "  ".join(lines)
-        self.lbl_heatmap.setText(f"<pre style='color: #3498db; font-size: 14px; letter-spacing: 3px;'>{heatmap_text}</pre>")
+        self.lbl_heatmap.setText(
+            f"<pre style='color: #3498db; font-size: 14px; letter-spacing: 3px;'>{heatmap_text}</pre>"
+        )
         self.lbl_heatmap.setTextFormat(Qt.TextFormat.RichText)
 
     def _refresh_history(self) -> None:
         result = self.cb_hist_result.currentText()
         result_filter = None if result == "All" else result
         date_from = self.de_from.date().toString("yyyy-MM-dd")
-        date_to   = self.de_to.date().toString("yyyy-MM-dd")
+        date_to = self.de_to.date().toString("yyyy-MM-dd")
 
         sessions = get_sessions(result=result_filter, date_from=date_from, date_to=date_to)
         bos = {bo.id: bo for bo in get_all_build_orders()}
@@ -544,16 +573,18 @@ class AnalyticsTab(QWidget):
             ax.set_title("Feudal Time Trend (last 30 sessions)", color="#ecf0f1", pad=10)
             ax.set_ylabel("Seconds", color="#7f8c8d")
             ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda s, _: _sec_to_mmss(int(s))))
-            ax.set_xticks(x[::max(1, len(x)//8)])
-            ax.set_xticklabels([labels[i] for i in x[::max(1, len(x)//8)]], rotation=30, fontsize=8)
+            ax.set_xticks(x[:: max(1, len(x) // 8)])
+            ax.set_xticklabels(
+                [labels[i] for i in x[:: max(1, len(x) // 8)]], rotation=30, fontsize=8
+            )
             ax.grid(axis="y", color="#2c2c2e", linestyle="--", alpha=0.5)
             fig.tight_layout(pad=1.5)
 
             pix = _render_chart(fig)
             plt.close(fig)
-            self.lbl_feudal_chart.setPixmap(pix.scaledToWidth(
-                chart_width, Qt.TransformationMode.SmoothTransformation
-            ))
+            self.lbl_feudal_chart.setPixmap(
+                pix.scaledToWidth(chart_width, Qt.TransformationMode.SmoothTransformation)
+            )
 
         if not accuracy_trend:
             self.lbl_accuracy_chart.setText("No accuracy data yet.")
@@ -568,16 +599,18 @@ class AnalyticsTab(QWidget):
             ax.set_title("Accuracy Trend (last 30 sessions)", color="#ecf0f1", pad=10)
             ax.set_ylabel("Accuracy %", color="#7f8c8d")
             ax.set_ylim(0, 100)
-            ax.set_xticks(x[::max(1, len(x)//8)])
-            ax.set_xticklabels([labels[i] for i in x[::max(1, len(x)//8)]], rotation=30, fontsize=8)
+            ax.set_xticks(x[:: max(1, len(x) // 8)])
+            ax.set_xticklabels(
+                [labels[i] for i in x[:: max(1, len(x) // 8)]], rotation=30, fontsize=8
+            )
             ax.grid(axis="y", color="#2c2c2e", linestyle="--", alpha=0.5)
             fig.tight_layout(pad=1.5)
 
             pix = _render_chart(fig)
             plt.close(fig)
-            self.lbl_accuracy_chart.setPixmap(pix.scaledToWidth(
-                chart_width, Qt.TransformationMode.SmoothTransformation
-            ))
+            self.lbl_accuracy_chart.setPixmap(
+                pix.scaledToWidth(chart_width, Qt.TransformationMode.SmoothTransformation)
+            )
 
     def _refresh_leaderboard(self) -> None:
         rows = get_most_practiced_builds(limit=20)
@@ -589,7 +622,9 @@ class AnalyticsTab(QWidget):
             self.leaderboard_table.setItem(row, 1, QTableWidgetItem(r.get("civ", "")))
             self.leaderboard_table.setItem(row, 2, QTableWidgetItem(str(r.get("session_count", 0))))
             self.leaderboard_table.setItem(row, 3, QTableWidgetItem(_pct(r.get("avg_accuracy"))))
-            self.leaderboard_table.setItem(row, 4, QTableWidgetItem(_sec_to_mmss(r.get("best_feudal"))))
+            self.leaderboard_table.setItem(
+                row, 4, QTableWidgetItem(_sec_to_mmss(r.get("best_feudal")))
+            )
 
     # ── Actions ───────────────────────────────────────────────────────────
 
@@ -600,9 +635,11 @@ class AnalyticsTab(QWidget):
             else:
                 path = export_sessions_json()
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.information(self, "Exported", f"Data exported to:\n{path}")
         except Exception as exc:
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.warning(self, "Export Error", str(exc))
 
     def _on_delete_session(self) -> None:
@@ -615,8 +652,10 @@ class AnalyticsTab(QWidget):
         if session_id is None:
             return
         from PySide6.QtWidgets import QMessageBox
+
         reply = QMessageBox.question(
-            self, "Delete Session",
+            self,
+            "Delete Session",
             "Delete this session permanently?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )

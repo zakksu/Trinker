@@ -18,12 +18,14 @@ _OCR_OK = False
 
 try:
     import mss
+
     _MSS_OK = True
 except ImportError:
     mss = None  # type: ignore
 
 try:
     import easyocr
+
     _OCR_OK = True
 except ImportError:
     easyocr = None  # type: ignore
@@ -63,8 +65,10 @@ class OcrWatcher:
         try:
             with mss.mss() as sct:
                 shot = sct.grab(region)
-                from PIL import Image
                 import io
+
+                from PIL import Image
+
                 img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
                 buf = io.BytesIO()
                 img.convert("L").save(buf, format="PNG")
@@ -82,8 +86,9 @@ class OcrWatcher:
         try:
             with mss.mss() as sct:
                 shot = sct.grab(region)
-                from PIL import Image
                 import numpy as np
+                from PIL import Image
+
                 img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
                 arr = np.array(img.convert("L"))
                 reader = self._get_reader()

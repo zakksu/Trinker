@@ -41,7 +41,10 @@ def match_build_for_civ(civ: str, preferred_bo_id: Optional[int] = None):
     if civ_matches:
         for keyword in ("Archer", "Scout", "Castle", "Rush"):
             for b in civ_matches:
-                if keyword.lower() in b.name.lower() or keyword.lower() in (b.strategy or "").lower():
+                if (
+                    keyword.lower() in b.name.lower()
+                    or keyword.lower() in (b.strategy or "").lower()
+                ):
                     return b
         return civ_matches[0]
 
@@ -70,7 +73,9 @@ def profile_to_session(
     if profile.castle_time_sec:
         milestones.append(Milestone(label="Clicked Castle", game_time_sec=profile.castle_time_sec))
     if profile.imperial_time_sec:
-        milestones.append(Milestone(label="Clicked Imperial", game_time_sec=profile.imperial_time_sec))
+        milestones.append(
+            Milestone(label="Clicked Imperial", game_time_sec=profile.imperial_time_sec)
+        )
 
     feudal_delta = castle_delta = None
     benchmarks = get_benchmarks_for(bo.civ, bo.strategy)
@@ -87,10 +92,16 @@ def profile_to_session(
 
     timing_note = []
     if profile.feudal_time_sec:
-        timing_note.append(f"Feudal {profile.feudal_time_sec // 60}:{profile.feudal_time_sec % 60:02d}")
+        timing_note.append(
+            f"Feudal {profile.feudal_time_sec // 60}:{profile.feudal_time_sec % 60:02d}"
+        )
     if profile.castle_time_sec:
-        timing_note.append(f"Castle {profile.castle_time_sec // 60}:{profile.castle_time_sec % 60:02d}")
-    timing_str = ", ".join(timing_note) if timing_note else "timings unavailable (DE v101 parser pending)"
+        timing_note.append(
+            f"Castle {profile.castle_time_sec // 60}:{profile.castle_time_sec % 60:02d}"
+        )
+    timing_str = (
+        ", ".join(timing_note) if timing_note else "timings unavailable (DE v101 parser pending)"
+    )
 
     return Session(
         build_order_id=bo.id,

@@ -1,4 +1,5 @@
 """Tests for per-step ideal timing calculations."""
+
 import sys
 from pathlib import Path
 

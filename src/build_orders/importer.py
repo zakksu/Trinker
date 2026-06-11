@@ -18,16 +18,14 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from .models import BuildOrder, BuildStep
-from ..core.config import (
-    BUILDORDERGUIDE_BASE, REQUEST_TIMEOUT, REQUEST_HEADERS, CACHE_DIR
-)
+from ..core.config import CACHE_DIR, REQUEST_HEADERS, REQUEST_TIMEOUT
 from ..core.logger import logger
-
+from .models import BuildOrder, BuildStep
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mmss_to_sec(time_str: str) -> int:
     """
@@ -74,6 +72,7 @@ def _get(url: str, *, cache_key: Optional[str] = None) -> str:
 # buildorderguide.com importer
 # ---------------------------------------------------------------------------
 
+
 def import_from_buildorderguide(url: str) -> BuildOrder:
     """
     Fetch and parse a build order from buildorderguide.com.
@@ -110,12 +109,12 @@ def import_from_buildorderguide(url: str) -> BuildOrder:
 
     # ── Metadata ──────────────────────────────────────────────────────────────
     name = _extract_text(soup, "h1") or slug
-    civ  = _extract_meta_or_tag(soup, "civ") or "Any"
+    civ = _extract_meta_or_tag(soup, "civ") or "Any"
 
     # Strategy / description lives in various meta containers depending on page version
     strategy = ""
-    notes    = ""
-    desc_el  = soup.find(class_=re.compile(r"description|overview|intro", re.I))
+    notes = ""
+    desc_el = soup.find(class_=re.compile(r"description|overview|intro", re.I))
     if desc_el:
         notes = desc_el.get_text(separator=" ", strip=True)
 
@@ -255,7 +254,17 @@ def _infer_strategy(name: str) -> str:
 def _infer_tags(name: str, civ: str, strategy: str) -> list[str]:
     tags = []
     name_l = (name + " " + strategy).lower()
-    for kw in ["rush", "castle", "boom", "knight", "archer", "scout", "drush", "monk", "siege"]:
+    for kw in [
+        "rush",
+        "castle",
+        "boom",
+        "knight",
+        "archer",
+        "scout",
+        "drush",
+        "monk",
+        "siege",
+    ]:
         if kw in name_l:
             tags.append(kw)
     if civ and civ.lower() not in ("any", ""):
@@ -280,6 +289,7 @@ def _safe_int(s: str, default: int = 0) -> int:
 # ---------------------------------------------------------------------------
 # JSON importer (TRINKER native format)
 # ---------------------------------------------------------------------------
+
 
 def import_from_json_file(path: str | Path) -> BuildOrder:
     """
@@ -316,6 +326,7 @@ def import_from_json_file(path: str | Path) -> BuildOrder:
 # ---------------------------------------------------------------------------
 # Plain-text importer (legacy RTS_Overlay .txt format)
 # ---------------------------------------------------------------------------
+
 
 def import_from_txt_file(path: str | Path) -> BuildOrder:
     """
@@ -362,22 +373,24 @@ def import_from_txt_file(path: str | Path) -> BuildOrder:
         if m:
             time_str = m.group(1)
             time_sec = _mmss_to_sec(time_str)
-            line = line[m.end():]
+            line = line[m.end() :]
 
         # Try pop count (bare integer before description)
         pop = 0
         m2 = re.match(r"^(\d{1,3})\s+", line)
         if m2 and int(m2.group(1)) < 300:
             pop = int(m2.group(1))
-            line = line[m2.end():]
+            line = line[m2.end() :]
 
-        steps.append(BuildStep(
-            index=step_idx,
-            description=line,
-            time_str=time_str,
-            time_sec=time_sec,
-            population=pop,
-        ))
+        steps.append(
+            BuildStep(
+                index=step_idx,
+                description=line,
+                time_str=time_str,
+                time_sec=time_sec,
+                population=pop,
+            )
+        )
         step_idx += 1
 
     bo = BuildOrder(
@@ -396,9 +409,11 @@ def import_from_txt_file(path: str | Path) -> BuildOrder:
 # Multi-source URL import (tries each source until one succeeds)
 # ---------------------------------------------------------------------------
 
+
 def _finalize_import(bo: BuildOrder) -> BuildOrder:
     """Apply enrichment and age inference to imported build orders."""
     from .step_enricher import enrich_steps, infer_age_from_text
+
     for step in bo.steps:
         if not step.age:
             step.age = infer_age_from_text(step.description)
@@ -424,8 +439,12 @@ def import_from_aoe2guides(url: str) -> BuildOrder:
         raise RuntimeError("Could not parse steps from aoe2guides.com")
 
     bo = BuildOrder(
-        name=name, civ="Any", strategy=_infer_strategy(name),
-        source_url=url, external_id=f"aoe2g_{slug}", steps=steps,
+        name=name,
+        civ="Any",
+        strategy=_infer_strategy(name),
+        source_url=url,
+        external_id=f"aoe2g_{slug}",
+        steps=steps,
         tags=_infer_tags(name, "Any", ""),
     )
     return _finalize_import(bo)
@@ -445,7 +464,7 @@ def import_from_spreadsheet_json(url: str) -> BuildOrder:
     resp.raise_for_status()
     text = resp.text
     if text.startswith("/*"):
-        text = text[text.find("{"): text.rfind("}") + 1]
+        text = text[text.find("{") : text.rfind("}") + 1]
 
     data = json.loads(text)
     rows = data if isinstance(data, list) else data.get("rows") or data.get("steps") or []
@@ -459,11 +478,14 @@ def import_from_spreadsheet_json(url: str) -> BuildOrder:
             desc = row.get("description") or row.get("step") or row.get("c", "")
             if not desc:
                 continue
-            steps.append(BuildStep(
-                index=i, description=str(desc),
-                time_str=str(row.get("time") or row.get("time_str") or ""),
-                population=int(row.get("pop") or row.get("population") or 0),
-            ))
+            steps.append(
+                BuildStep(
+                    index=i,
+                    description=str(desc),
+                    time_str=str(row.get("time") or row.get("time_str") or ""),
+                    population=int(row.get("pop") or row.get("population") or 0),
+                )
+            )
 
     if not steps:
         raise RuntimeError("No steps found in spreadsheet/JSON URL")
@@ -492,7 +514,9 @@ def import_from_url(url: str) -> BuildOrder:
         sources.append(("buildorderguide.com", import_from_buildorderguide))
     if "aoe2guides" in host:
         sources.append(("aoe2guides.com", import_from_aoe2guides))
-    if any(x in host for x in ("docs.google.com", "raw.githubusercontent.com")) or url.endswith(".json"):
+    if any(x in host for x in ("docs.google.com", "raw.githubusercontent.com")) or url.endswith(
+        ".json"
+    ):
         sources.append(("JSON/Sheets", import_from_spreadsheet_json))
 
     # Unknown host — try all parsers
@@ -514,9 +538,7 @@ def import_from_url(url: str) -> BuildOrder:
             errors.append(f"{label}: {exc}")
             logger.debug("Import via %s failed: %s", label, exc)
 
-    raise RuntimeError(
-        "Could not import from any source.\n" + "\n".join(errors)
-    )
+    raise RuntimeError("Could not import from any source.\n" + "\n".join(errors))
 
 
 def _import_generic_html(url: str) -> BuildOrder:
@@ -528,6 +550,9 @@ def _import_generic_html(url: str) -> BuildOrder:
     if not steps:
         raise RuntimeError("No steps found on page")
     return BuildOrder(
-        name=name, civ="Any", strategy=_infer_strategy(name),
-        source_url=url, steps=steps,
+        name=name,
+        civ="Any",
+        strategy=_infer_strategy(name),
+        source_url=url,
+        steps=steps,
     )

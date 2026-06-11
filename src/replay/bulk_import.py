@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 from ..analytics.session import save_session
@@ -93,6 +92,8 @@ def import_all_replays(
 
     logger.info(
         "Bulk import: %d imported, %d skipped, %d failed",
-        result.imported, result.skipped, result.failed,
+        result.imported,
+        result.skipped,
+        result.failed,
     )
     return result

@@ -10,7 +10,6 @@ from typing import Optional
 from ..core.database import db_conn
 from ..core.logger import logger
 
-
 # ---------------------------------------------------------------------------
 # Timing evaluation thresholds
 # ---------------------------------------------------------------------------
@@ -19,25 +18,26 @@ from ..core.logger import logger
 #   Green  = on pace (within 0-10% slower than benchmark max)
 #   Yellow = slightly behind (10-25% slower)
 #   Red    = behind (>25% slower)
-GREEN_THRESHOLD  = 1.10   # up to 10% over benchmark max → green
-YELLOW_THRESHOLD = 1.25   # up to 25% over → yellow
+GREEN_THRESHOLD = 1.10  # up to 10% over benchmark max → green
+YELLOW_THRESHOLD = 1.25  # up to 25% over → yellow
 
 
 @dataclass
 class TimingBenchmark:
     """A single timing benchmark record from the ideal_timings table."""
-    id:               int
-    civ:              str
-    strategy:         str
-    pop_count:        Optional[int]
-    feudal_min_sec:   Optional[int]
-    feudal_max_sec:   Optional[int]
-    castle_min_sec:   Optional[int]
-    castle_max_sec:   Optional[int]
+
+    id: int
+    civ: str
+    strategy: str
+    pop_count: Optional[int]
+    feudal_min_sec: Optional[int]
+    feudal_max_sec: Optional[int]
+    castle_min_sec: Optional[int]
+    castle_max_sec: Optional[int]
     imperial_min_sec: Optional[int]
     imperial_max_sec: Optional[int]
-    source:           str
-    notes:            str
+    source: str
+    notes: str
 
     def feudal_range_str(self) -> str:
         if self.feudal_min_sec and self.feudal_max_sec:
@@ -59,12 +59,11 @@ def _sec_to_mmss(sec: int) -> str:
 # Database queries
 # ---------------------------------------------------------------------------
 
+
 def get_all_benchmarks() -> list[TimingBenchmark]:
     """Return all ideal timing benchmarks from the database."""
     with db_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM ideal_timings ORDER BY civ, strategy"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM ideal_timings ORDER BY civ, strategy").fetchall()
     return [TimingBenchmark(**dict(row)) for row in rows]
 
 
@@ -104,8 +103,18 @@ def add_custom_benchmark(
                 castle_min_sec, castle_max_sec, imperial_min_sec, imperial_max_sec,
                 source, notes)
                VALUES (?,?,?,?,?,?,?,?,?,'Custom',?)""",
-            (civ, strategy, pop_count, feudal_min_sec, feudal_max_sec,
-             castle_min_sec, castle_max_sec, imperial_min_sec, imperial_max_sec, notes),
+            (
+                civ,
+                strategy,
+                pop_count,
+                feudal_min_sec,
+                feudal_max_sec,
+                castle_min_sec,
+                castle_max_sec,
+                imperial_min_sec,
+                imperial_max_sec,
+                notes,
+            ),
         )
         return cur.lastrowid
 
@@ -113,6 +122,7 @@ def add_custom_benchmark(
 # ---------------------------------------------------------------------------
 # Performance evaluation helpers
 # ---------------------------------------------------------------------------
+
 
 def evaluate_feudal_time(
     actual_sec: int,
@@ -128,7 +138,7 @@ def evaluate_feudal_time(
         return "green", "No feudal benchmark for this build."
 
     max_b = benchmark.feudal_max_sec
-    diff  = actual_sec - max_b
+    diff = actual_sec - max_b
 
     if actual_sec <= max_b:
         status = "green"
@@ -156,7 +166,7 @@ def evaluate_castle_time(
         return "green", "No castle benchmark for this build."
 
     max_b = benchmark.castle_max_sec
-    diff  = actual_sec - max_b
+    diff = actual_sec - max_b
 
     if actual_sec <= max_b * GREEN_THRESHOLD:
         status = "green"
@@ -192,7 +202,7 @@ def calculate_accuracy_score(
 
     def timing_score(delta: Optional[int]) -> float:
         if delta is None:
-            return 25.0   # give full points if not tracked
+            return 25.0  # give full points if not tracked
         penalty = min(abs(delta), 120) / 120.0
         return 25.0 * (1.0 - penalty)
 

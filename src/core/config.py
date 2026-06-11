@@ -6,14 +6,14 @@ Uses platformdirs for cross-platform data directory resolution.
 
 import json
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
-
 
 # ---------------------------------------------------------------------------
 # Platform-aware application directories (no external dependency needed)
 # ---------------------------------------------------------------------------
+
 
 class _AppDirs:
     """Minimal cross-platform directory resolver (no platformdirs dependency)."""
@@ -33,12 +33,6 @@ class _AppDirs:
 
     @property
     def user_log_dir(self) -> str:
-        if sys.platform == "win32":
-            base = Path.home() / "AppData" / "Local"
-        elif sys.platform == "darwin":
-            base = Path.home() / "Library" / "Logs"
-        else:
-            base = Path.home() / ".local" / "share"
         return str(Path(self.user_data_dir) / "logs")
 
     @property
@@ -52,11 +46,11 @@ APP_DIRS = _AppDirs("TRINKER")
 # Key file paths
 # ---------------------------------------------------------------------------
 
-DATA_DIR   = Path(APP_DIRS.user_data_dir)
-LOG_DIR    = Path(APP_DIRS.user_log_dir)
-CACHE_DIR  = Path(APP_DIRS.user_cache_dir)
-DB_PATH    = DATA_DIR / "trinker.db"
-BO_DIR     = DATA_DIR / "build_orders"   # local build order JSON cache
+DATA_DIR = Path(APP_DIRS.user_data_dir)
+LOG_DIR = Path(APP_DIRS.user_log_dir)
+CACHE_DIR = Path(APP_DIRS.user_cache_dir)
+DB_PATH = DATA_DIR / "trinker.db"
+BO_DIR = DATA_DIR / "build_orders"  # local build order JSON cache
 EXPORT_DIR = DATA_DIR / "exports"
 
 # Create directories on import so downstream code never has to worry about it
@@ -69,7 +63,7 @@ for _d in (DATA_DIR, LOG_DIR, CACHE_DIR, BO_DIR, EXPORT_DIR):
 
 AO2_REPLAY_DIRS: list[Path] = [
     Path.home() / "Documents" / "My Games" / "Age of Empires 2 DE",
-    Path.home() / "Games"  / "Age of Empires 2 DE",
+    Path.home() / "Games" / "Age of Empires 2 DE",
 ]
 
 # ---------------------------------------------------------------------------
@@ -77,14 +71,13 @@ AO2_REPLAY_DIRS: list[Path] = [
 # ---------------------------------------------------------------------------
 
 BUILDORDERGUIDE_BASE = "https://www.buildorderguide.com"
-AOE2GG_BASE          = "https://aoe2.gg"
-AOE2NET_BASE         = "https://aoe2.net/api"
+AOE2GG_BASE = "https://aoe2.gg"
+AOE2NET_BASE = "https://aoe2.net/api"
 
-REQUEST_TIMEOUT = 15   # seconds
+REQUEST_TIMEOUT = 15  # seconds
 REQUEST_HEADERS = {
     "User-Agent": (
-        "TRINKER/1.0 AoE2TrainingCompanion "
-        "(https://github.com/user/trinker; contact@example.com)"
+        "TRINKER/1.0 AoE2TrainingCompanion (https://github.com/user/trinker; contact@example.com)"
     )
 }
 
@@ -93,8 +86,8 @@ REQUEST_HEADERS = {
 # ---------------------------------------------------------------------------
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
-VERSION_FILE  = Path(__file__).resolve().parent.parent.parent / "VERSION"
-GITHUB_REPO   = "zakksu/Trinker"
+VERSION_FILE = Path(__file__).resolve().parent.parent.parent / "VERSION"
+GITHUB_REPO = "zakksu/Trinker"
 
 
 def get_app_version() -> str:
@@ -106,38 +99,44 @@ def get_app_version() -> str:
         pass
     return "1.0.0"
 
+
 @dataclass
 class AppSettings:
     """
     All user-configurable preferences.
     Saved to / loaded from SETTINGS_FILE as JSON.
     """
-    theme: str = "dark"                  # "dark" | "light"
-    overlay_opacity: float = 0.88        # 0.0 – 1.0
+
+    theme: str = "dark"  # "dark" | "light"
+    accent_color: str = "#3498db"  # primary accent (future UI theming)
+    overlay_opacity: float = 0.88  # 0.0 – 1.0
     overlay_position: list[int] = field(default_factory=lambda: [100, 100])
-    overlay_size: list[int]     = field(default_factory=lambda: [300, 340])
-    hotkey_next_step: str   = "Ctrl+Right"
-    hotkey_prev_step: str   = "Ctrl+Left"
+    overlay_size: list[int] = field(default_factory=lambda: [300, 340])
+    hotkey_next_step: str = "Ctrl+Right"
+    hotkey_prev_step: str = "Ctrl+Left"
     hotkey_toggle_overlay: str = "Ctrl+Shift+O"
-    hotkey_start_session: str  = "Ctrl+Shift+S"
+    hotkey_start_session: str = "Ctrl+Shift+S"
     font_size: int = 11
-    auto_advance: bool = False           # auto-step on replay timer
+    auto_advance: bool = False  # auto-step on replay timer
     show_timings: bool = True
     ai_coach_enabled: bool = True
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
     telemetry_opt_in: bool = False
-    auto_prompt_new_replay: bool = True    # ask to import after a new game
-    last_seen_replay_mtime: float = 0.0    # tracks newest replay we've seen
-    last_seen_replay_path: str = ""        # path of last acknowledged replay
-    auto_postgame_coach: bool = True       # run AI coach after new replay import
-    overlay_coach_alert: str = ""          # pinned reminder for next overlay session
+    auto_prompt_new_replay: bool = True  # ask to import after a new game
+    last_seen_replay_mtime: float = 0.0  # tracks newest replay we've seen
+    last_seen_replay_path: str = ""  # path of last acknowledged replay
+    auto_postgame_coach: bool = True  # run AI coach after new replay import
+    overlay_coach_alert: str = ""  # pinned reminder for next overlay session
     overlay_coach_alert_bo_id: Optional[int] = None
-    ocr_capture_enabled: bool = False      # optional live OCR (mss + easyocr)
-    simple_mode: bool = True             # hide advanced Practice panels
+    ocr_capture_enabled: bool = False  # optional live OCR (mss + easyocr)
+    simple_mode: bool = True  # hide advanced Practice panels
     last_practice_bo_id: Optional[int] = None
-    auto_detect_sessions: bool = True    # auto-import replays in background
-    overlay_sync_game_pause: bool = True # pause overlay timer when game is paused
+    auto_detect_sessions: bool = True  # auto-import replays in background
+    overlay_sync_game_pause: bool = True  # pause overlay timer when game is paused
+    onboarding_complete: bool = True  # first-run wizard (False for brand-new installs)
+    steam_id: str = ""
+    replay_dirs: list[str] = field(default_factory=list)  # custom AoE2 replay roots
 
     def save(self) -> None:
         """Persist settings to disk."""
@@ -152,9 +151,22 @@ class AppSettings:
                 return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
         except Exception:
             pass
-        inst = cls()
+        inst = cls(onboarding_complete=False)
         inst.save()
         return inst
+
+
+def get_replay_search_dirs() -> list[Path]:
+    """Replay folders to scan — custom paths first, then defaults."""
+    dirs: list[Path] = []
+    for raw in settings.replay_dirs:
+        p = Path(raw)
+        if p.exists() and p not in dirs:
+            dirs.append(p)
+    for p in AO2_REPLAY_DIRS:
+        if p.exists() and p not in dirs:
+            dirs.append(p)
+    return dirs
 
 
 # Module-level singleton

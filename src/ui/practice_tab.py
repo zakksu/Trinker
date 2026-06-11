@@ -5,24 +5,40 @@ milestone logging, performance feedback, and post-session review.
 """
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QTimer, Signal, QThread, QObject
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QComboBox, QTextEdit, QGroupBox, QFormLayout, QFrame, QSplitter,
-    QListWidget, QListWidgetItem, QMessageBox, QSpinBox, QDoubleSpinBox,
-    QFileDialog, QDialog, QDialogButtonBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
-from ..analytics.session import Session, Milestone, save_session, get_summary_stats
+from ..analytics.session import Milestone, Session, get_summary_stats, save_session
 from ..build_orders.manager import get_all_build_orders
 from ..build_orders.models import BuildOrder
 from ..build_orders.timings import (
-    get_benchmarks_for, evaluate_feudal_time, evaluate_castle_time,
     calculate_accuracy_score,
+    evaluate_castle_time,
+    evaluate_feudal_time,
+    get_benchmarks_for,
 )
 from ..core.config import settings
 from ..core.database import now_iso
@@ -51,9 +67,9 @@ QListWidget::item:selected { background: #1c3a5c; }
 """
 
 STATUS_STYLES = {
-    "green":   "color: #2ecc71; font-weight: bold;",
-    "yellow":  "color: #f1c40f; font-weight: bold;",
-    "red":     "color: #e74c3c; font-weight: bold;",
+    "green": "color: #2ecc71; font-weight: bold;",
+    "yellow": "color: #f1c40f; font-weight: bold;",
+    "red": "color: #e74c3c; font-weight: bold;",
     "neutral": "color: #95a5a6;",
 }
 
@@ -102,7 +118,7 @@ class _CoachingDialog(QDialog):
 
 class _PostGameCoachWorker(QObject):
     finished = Signal(object)
-    error    = Signal(str)
+    error = Signal(str)
 
     def __init__(self, replay_path: str, civ: str, strategy: str, bo_id, bo_name: str):
         super().__init__()
@@ -115,9 +131,13 @@ class _PostGameCoachWorker(QObject):
     def run(self) -> None:
         try:
             from ..ai_coach.postgame import run_postgame_coach
+
             result = run_postgame_coach(
-                self.replay_path, self.civ, self.strategy,
-                self.bo_id, self.bo_name,
+                self.replay_path,
+                self.civ,
+                self.strategy,
+                self.bo_id,
+                self.bo_name,
             )
             self.finished.emit(result)
         except Exception as exc:
@@ -126,7 +146,7 @@ class _PostGameCoachWorker(QObject):
 
 class _CoachingWorker(QObject):
     finished = Signal(str)
-    error    = Signal(str)
+    error = Signal(str)
 
     def __init__(self, session, build_order: BuildOrder):
         super().__init__()
@@ -136,6 +156,7 @@ class _CoachingWorker(QObject):
     def run(self) -> None:
         try:
             from ..ai_coach.coach import get_session_coaching
+
             result = get_session_coaching(
                 build_order_name=self.build_order.name,
                 civ=self.build_order.civ,
@@ -154,8 +175,8 @@ class _CoachingWorker(QObject):
 class TimerWidget(QFrame):
     """Large game timer display with start/stop/lap controls."""
 
-    lapped = Signal(str, int)          # (label, elapsed_sec)
-    elapsed_changed = Signal(int)      # emitted every second while running
+    lapped = Signal(str, int)  # (label, elapsed_sec)
+    elapsed_changed = Signal(int)  # emitted every second while running
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -183,11 +204,15 @@ class TimerWidget(QFrame):
 
         btn_row = QHBoxLayout()
         self.btn_start = QPushButton("▶ Start")
-        self.btn_start.setStyleSheet("QPushButton { background: #1a4a2a; color: #2ecc71; border: 1px solid #2ecc71; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; } QPushButton:hover { background: #2ecc71; color: #111; }")
+        self.btn_start.setStyleSheet(
+            "QPushButton { background: #1a4a2a; color: #2ecc71; border: 1px solid #2ecc71; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; } QPushButton:hover { background: #2ecc71; color: #111; }"
+        )
         self.btn_start.clicked.connect(self.toggle)
 
         self.btn_reset = QPushButton("↺ Reset")
-        self.btn_reset.setStyleSheet("QPushButton { background: #1e1e22; color: #7f8c8d; border: 1px solid #2c2c2e; border-radius: 6px; padding: 8px 16px; }")
+        self.btn_reset.setStyleSheet(
+            "QPushButton { background: #1e1e22; color: #7f8c8d; border: 1px solid #2c2c2e; border-radius: 6px; padding: 8px 16px; }"
+        )
         self.btn_reset.clicked.connect(self.reset)
 
         btn_row.addWidget(self.btn_start)
@@ -205,7 +230,9 @@ class TimerWidget(QFrame):
         self._running = True
         self._timer.start()
         self.btn_start.setText("⏸ Pause")
-        self.btn_start.setStyleSheet("QPushButton { background: #4a3a1a; color: #f1c40f; border: 1px solid #f1c40f; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; }")
+        self.btn_start.setStyleSheet(
+            "QPushButton { background: #4a3a1a; color: #f1c40f; border: 1px solid #f1c40f; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; }"
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -213,7 +240,9 @@ class TimerWidget(QFrame):
         if self._start_time:
             self._elapsed = int(time.time() - self._start_time)
         self.btn_start.setText("▶ Resume")
-        self.btn_start.setStyleSheet("QPushButton { background: #1a4a2a; color: #2ecc71; border: 1px solid #2ecc71; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; }")
+        self.btn_start.setStyleSheet(
+            "QPushButton { background: #1a4a2a; color: #2ecc71; border: 1px solid #2ecc71; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; }"
+        )
 
     def reset(self) -> None:
         self._running = False
@@ -222,7 +251,9 @@ class TimerWidget(QFrame):
         self._start_time = None
         self.lbl_time.setText("0:00")
         self.btn_start.setText("▶ Start")
-        self.btn_start.setStyleSheet("QPushButton { background: #1a4a2a; color: #2ecc71; border: 1px solid #2ecc71; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; } QPushButton:hover { background: #2ecc71; color: #111; }")
+        self.btn_start.setStyleSheet(
+            "QPushButton { background: #1a4a2a; color: #2ecc71; border: 1px solid #2ecc71; border-radius: 6px; padding: 8px 20px; font-weight: bold; font-size: 13px; } QPushButton:hover { background: #2ecc71; color: #111; }"
+        )
 
     def elapsed_sec(self) -> int:
         if self._running and self._start_time:
@@ -247,11 +278,21 @@ class ResourceTracker(QGroupBox):
         layout = QFormLayout(self)
         layout.setSpacing(6)
 
-        self.sp_pop  = QSpinBox(); self.sp_pop.setRange(0, 500); self.sp_pop.setSuffix(" pop")
-        self.sp_food = QSpinBox(); self.sp_food.setRange(0, 9999); self.sp_food.setSuffix(" 🌾")
-        self.sp_wood = QSpinBox(); self.sp_wood.setRange(0, 9999); self.sp_wood.setSuffix(" 🪵")
-        self.sp_gold = QSpinBox(); self.sp_gold.setRange(0, 9999); self.sp_gold.setSuffix(" 🪙")
-        self.sp_stone= QSpinBox(); self.sp_stone.setRange(0, 9999); self.sp_stone.setSuffix(" 🪨")
+        self.sp_pop = QSpinBox()
+        self.sp_pop.setRange(0, 500)
+        self.sp_pop.setSuffix(" pop")
+        self.sp_food = QSpinBox()
+        self.sp_food.setRange(0, 9999)
+        self.sp_food.setSuffix(" 🌾")
+        self.sp_wood = QSpinBox()
+        self.sp_wood.setRange(0, 9999)
+        self.sp_wood.setSuffix(" 🪵")
+        self.sp_gold = QSpinBox()
+        self.sp_gold.setRange(0, 9999)
+        self.sp_gold.setSuffix(" 🪙")
+        self.sp_stone = QSpinBox()
+        self.sp_stone.setRange(0, 9999)
+        self.sp_stone.setSuffix(" 🪨")
 
         self.cb_age = QComboBox()
         self.cb_age.addItems(["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"])
@@ -265,12 +306,12 @@ class ResourceTracker(QGroupBox):
 
     def snapshot(self) -> dict:
         return {
-            "pop":   self.sp_pop.value(),
-            "food":  self.sp_food.value(),
-            "wood":  self.sp_wood.value(),
-            "gold":  self.sp_gold.value(),
+            "pop": self.sp_pop.value(),
+            "food": self.sp_food.value(),
+            "wood": self.sp_wood.value(),
+            "gold": self.sp_gold.value(),
             "stone": self.sp_stone.value(),
-            "age":   self.cb_age.currentText(),
+            "age": self.cb_age.currentText(),
         }
 
 
@@ -287,7 +328,7 @@ class PracticeTab(QWidget):
       - Post-session notes and save
     """
 
-    session_saved = Signal(object)   # emits the saved Session
+    session_saved = Signal(object)  # emits the saved Session
 
     def __init__(self, overlay=None, parent=None):
         super().__init__(parent)
@@ -364,7 +405,12 @@ class PracticeTab(QWidget):
         quick_row = QHBoxLayout(self.quick_milestone_row)
         quick_row.setContentsMargins(0, 0, 0, 0)
         quick_row.setSpacing(6)
-        for label in ["Clicked Feudal", "Clicked Castle", "Clicked Imperial", "Hit 100 Pop"]:
+        for label in [
+            "Clicked Feudal",
+            "Clicked Castle",
+            "Clicked Imperial",
+            "Hit 100 Pop",
+        ]:
             btn = QPushButton(label)
             btn.setStyleSheet("QPushButton { font-size: 10px; padding: 4px 8px; }")
             btn.clicked.connect(lambda checked, l=label: self._log_milestone(l))
@@ -423,7 +469,9 @@ class PracticeTab(QWidget):
 
         btn_row = QHBoxLayout()
         self.btn_save = QPushButton("💾 Save Session")
-        self.btn_save.setStyleSheet("QPushButton { background: #1c3a5c; color: #3498db; border: 1px solid #2c5a8c; border-radius: 6px; padding: 8px 16px; font-weight: bold; }")
+        self.btn_save.setStyleSheet(
+            "QPushButton { background: #1c3a5c; color: #3498db; border: 1px solid #2c5a8c; border-radius: 6px; padding: 8px 16px; font-weight: bold; }"
+        )
         self.btn_save.clicked.connect(self._on_save_session)
         btn_row.addWidget(self.btn_save)
         ctrl_layout.addLayout(btn_row)
@@ -544,9 +592,13 @@ class PracticeTab(QWidget):
             self.btn_toggle_advanced.setVisible(False)
 
         for w in (
-            self.resource_tracker, self.quick_milestone_row,
-            self.feedback_group, self.milestone_group, self.steps_group,
-            self.pb_group, self.right_panel,
+            self.resource_tracker,
+            self.quick_milestone_row,
+            self.feedback_group,
+            self.milestone_group,
+            self.steps_group,
+            self.pb_group,
+            self.right_panel,
         ):
             w.setVisible(show_adv)
         self.replay_group.setVisible(True)
@@ -594,6 +646,7 @@ class PracticeTab(QWidget):
         if bo_id is None:
             return
         from ..build_orders.manager import get_build_order
+
         bo = get_build_order(bo_id)
         if bo:
             self.load_build_order(bo)
@@ -618,7 +671,8 @@ class PracticeTab(QWidget):
 
     def _on_browse_replay(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select AoE2 Replay",
+            self,
+            "Select AoE2 Replay",
             str(Path.home() / "Documents" / "My Games" / "Age of Empires 2 DE"),
             "AoE2 Replays (*.aoe2record);;All Files (*)",
         )
@@ -628,13 +682,15 @@ class PracticeTab(QWidget):
     def import_last_replay(self, *, silent: bool = False) -> bool:
         """Load the newest .aoe2record from the AoE2 replays folder."""
         from ..replay.parser import get_latest_replay
+
         latest = get_latest_replay()
         if not latest:
             if not silent:
                 QMessageBox.information(
-                    self, "No Replays Found",
+                    self,
+                    "No Replays Found",
                     "No .aoe2record files found in your AoE2 replays folder.\n\n"
-                    f"Expected location:\n{Path.home() / 'Documents' / 'My Games' / 'Age of Empires 2 DE'}"
+                    f"Expected location:\n{Path.home() / 'Documents' / 'My Games' / 'Age of Empires 2 DE'}",
                 )
             return False
         self._load_replay(str(latest), mark_seen=True)
@@ -649,6 +705,7 @@ class PracticeTab(QWidget):
             return
 
         from ..replay.parser import get_latest_replay
+
         latest = get_latest_replay()
         if not latest:
             return
@@ -660,7 +717,8 @@ class PracticeTab(QWidget):
             return
 
         reply = QMessageBox.question(
-            self, "New Game Detected",
+            self,
+            "New Game Detected",
             f"A new replay was found from your last game:\n\n"
             f"{latest.name}\n\n"
             "Import it into this practice session?",
@@ -692,7 +750,8 @@ class PracticeTab(QWidget):
             return
 
         reply = QMessageBox.question(
-            self, "Match Build Order?",
+            self,
+            "Match Build Order?",
             f"Replay civ: {civ}\n\nLoad '{best.name}' for this review?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
@@ -700,8 +759,9 @@ class PracticeTab(QWidget):
             self.load_build_order(best)
 
     def _load_replay(self, path: str, *, mark_seen: bool = True) -> None:
-        from ..replay.parser import parse_replay, format_replay_duration
         from ..replay.analyzer import analyze_replay
+        from ..replay.parser import format_replay_duration, parse_replay
+
         info = parse_replay(path)
         analysis = analyze_replay(path)
         self._replay_path = path
@@ -745,7 +805,11 @@ class PracticeTab(QWidget):
 
         self._postgame_thread = QThread(self)
         self._postgame_worker = _PostGameCoachWorker(
-            replay_path, civ, strategy, bo_id, bo_name,
+            replay_path,
+            civ,
+            strategy,
+            bo_id,
+            bo_name,
         )
         self._postgame_worker.moveToThread(self._postgame_thread)
         self._postgame_thread.started.connect(self._postgame_worker.run)
@@ -768,9 +832,9 @@ class PracticeTab(QWidget):
 
         if result.overlay_alert:
             reply = QMessageBox.question(
-                self, "Pin to Overlay?",
-                f"Show this reminder on your overlay next match?\n\n"
-                f"\"{result.overlay_alert}\"",
+                self,
+                "Pin to Overlay?",
+                f'Show this reminder on your overlay next match?\n\n"{result.overlay_alert}"',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
@@ -802,7 +866,9 @@ class PracticeTab(QWidget):
             self.cb_result.setCurrentText("practice")
 
         if filled:
-            note = f"Auto-filled from replay ({analysis.confidence} confidence): {', '.join(filled)}"
+            note = (
+                f"Auto-filled from replay ({analysis.confidence} confidence): {', '.join(filled)}"
+            )
             existing = self.ed_session_notes.toPlainText().strip()
             self.ed_session_notes.setPlainText(f"{existing}\n{note}".strip() if existing else note)
 
@@ -884,7 +950,7 @@ class PracticeTab(QWidget):
         self.lbl_castle_status.setStyleSheet(STATUS_STYLES.get(status, STATUS_STYLES["neutral"]))
 
     def _evaluate_performance(self) -> None:
-        steps_done  = self.sp_steps_done.value()
+        steps_done = self.sp_steps_done.value()
         total_steps = self._selected_bo.step_count if self._selected_bo else 0
 
         feudal_ms = next((ms for ms in self._milestones if "feudal" in ms.label.lower()), None)
@@ -896,7 +962,8 @@ class PracticeTab(QWidget):
             self._evaluate_castle(castle_ms.game_time_sec)
 
         score = calculate_accuracy_score(
-            steps_done, total_steps,
+            steps_done,
+            total_steps,
             feudal_ms.game_time_sec if feudal_ms else None,
             castle_ms.game_time_sec if castle_ms else None,
         )
@@ -925,7 +992,8 @@ class PracticeTab(QWidget):
         elapsed = self.timer_widget.elapsed_sec()
         if elapsed < 10:
             reply = QMessageBox.question(
-                self, "Short Session",
+                self,
+                "Short Session",
                 "The timer shows less than 10 seconds. Save anyway?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
@@ -935,13 +1003,14 @@ class PracticeTab(QWidget):
         resources = self.resource_tracker.snapshot()
         feudal_ms = next((ms for ms in self._milestones if "feudal" in ms.label.lower()), None)
         castle_ms = next((ms for ms in self._milestones if "castle" in ms.label.lower()), None)
-        imp_ms    = next((ms for ms in self._milestones if "imperial" in ms.label.lower()), None)
+        imp_ms = next((ms for ms in self._milestones if "imperial" in ms.label.lower()), None)
 
-        steps_done  = self.sp_steps_done.value()
+        steps_done = self.sp_steps_done.value()
         total_steps = self._selected_bo.step_count
 
         score = calculate_accuracy_score(
-            steps_done, total_steps,
+            steps_done,
+            total_steps,
             feudal_ms.game_time_sec if feudal_ms else None,
             castle_ms.game_time_sec if castle_ms else None,
         )
@@ -976,10 +1045,11 @@ class PracticeTab(QWidget):
         self._update_personal_bests()
 
         QMessageBox.information(
-            self, "Session Saved",
+            self,
+            "Session Saved",
             f"Session saved!\nAccuracy: {score:.1f}%\n"
             f"Feudal: {_sec_to_mmss(feudal_ms.game_time_sec) if feudal_ms else 'N/A'}\n"
-            f"Castle: {_sec_to_mmss(castle_ms.game_time_sec) if castle_ms else 'N/A'}"
+            f"Castle: {_sec_to_mmss(castle_ms.game_time_sec) if castle_ms else 'N/A'}",
         )
         logger.info("Session saved: id=%d score=%.1f", saved.id, score)
         self._offer_ai_coaching(saved)
@@ -987,7 +1057,8 @@ class PracticeTab(QWidget):
     def _offer_ai_coaching(self, session: Session) -> None:
         """Show post-session coaching tips (AI or offline fallback)."""
         reply = QMessageBox.question(
-            self, "AI Coach",
+            self,
+            "AI Coach",
             "Session saved. View coaching tips for this run?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
@@ -1003,9 +1074,7 @@ class PracticeTab(QWidget):
         self._coaching_thread.started.connect(self._coaching_worker.run)
 
         self._coaching_worker.finished.connect(dlg.set_result)
-        self._coaching_worker.error.connect(
-            lambda e: dlg.set_result(f"Coach error: {e}")
-        )
+        self._coaching_worker.error.connect(lambda e: dlg.set_result(f"Coach error: {e}"))
         self._coaching_worker.finished.connect(self._coaching_thread.quit)
         self._coaching_worker.error.connect(self._coaching_thread.quit)
         self._coaching_thread.finished.connect(self._coaching_thread.deleteLater)

@@ -8,23 +8,24 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from ..core.database import db_conn, now_iso, json_dumps, json_loads
+from ..core.database import db_conn, json_dumps, json_loads, now_iso
 from ..core.logger import logger
-
 
 # ---------------------------------------------------------------------------
 # Dataclass mirrors of the DB rows
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Milestone:
     """A user-logged event within a session (e.g. 'Clicked Feudal')."""
-    label:         str
+
+    label: str
     game_time_sec: Optional[int] = None
-    wall_time:     str           = field(default_factory=now_iso)
-    value:         Optional[str] = None
-    id:            Optional[int] = None
-    session_id:    Optional[int] = None
+    wall_time: str = field(default_factory=now_iso)
+    value: Optional[str] = None
+    id: Optional[int] = None
+    session_id: Optional[int] = None
 
 
 @dataclass
@@ -33,38 +34,40 @@ class Session:
     One practice session.
     Call save_session() to persist; all fields are optional except build_order_id.
     """
-    build_order_id:    int
-    date:              str           = field(default_factory=lambda: datetime.now(timezone.utc).date().isoformat())
-    duration_sec:      int           = 0
-    feudal_time_sec:   Optional[int] = None
-    castle_time_sec:   Optional[int] = None
+
+    build_order_id: int
+    date: str = field(default_factory=lambda: datetime.now(timezone.utc).date().isoformat())
+    duration_sec: int = 0
+    feudal_time_sec: Optional[int] = None
+    castle_time_sec: Optional[int] = None
     imperial_time_sec: Optional[int] = None
-    final_pop:         Optional[int] = None
-    food_at_feudal:    Optional[int] = None
-    wood_at_feudal:    Optional[int] = None
-    gold_at_feudal:    Optional[int] = None
-    stone_at_feudal:   Optional[int] = None
-    result:            str           = "practice"   # win / loss / draw / practice
-    accuracy_pct:      Optional[float] = None
-    notes:             str           = ""
-    mistakes_json:     list[str]     = field(default_factory=list)
-    replay_path:       Optional[str] = None
-    milestones:        list[Milestone] = field(default_factory=list)
-    id:                Optional[int] = None
-    created_at:        str           = field(default_factory=now_iso)
+    final_pop: Optional[int] = None
+    food_at_feudal: Optional[int] = None
+    wood_at_feudal: Optional[int] = None
+    gold_at_feudal: Optional[int] = None
+    stone_at_feudal: Optional[int] = None
+    result: str = "practice"  # win / loss / draw / practice
+    accuracy_pct: Optional[float] = None
+    notes: str = ""
+    mistakes_json: list[str] = field(default_factory=list)
+    replay_path: Optional[str] = None
+    milestones: list[Milestone] = field(default_factory=list)
+    id: Optional[int] = None
+    created_at: str = field(default_factory=now_iso)
     # 2.0 replay profile fields
-    civ:               str           = ""
-    map_name:          str           = ""
-    game_mode:         str           = "unknown"
-    data_quality:      str           = "unknown"
-    eapm:              Optional[float] = None
-    player_name:       str           = ""
-    insights_json:     str           = "{}"
+    civ: str = ""
+    map_name: str = ""
+    game_mode: str = "unknown"
+    data_quality: str = "unknown"
+    eapm: Optional[float] = None
+    player_name: str = ""
+    insights_json: str = "{}"
 
 
 # ---------------------------------------------------------------------------
 # Write operations
 # ---------------------------------------------------------------------------
+
 
 def save_session(session: Session) -> Session:
     """
@@ -84,15 +87,29 @@ def save_session(session: Session) -> Session:
                     civ, map_name, game_mode, data_quality, eapm, player_name, insights_json)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    session.build_order_id, session.date, session.duration_sec,
-                    session.feudal_time_sec, session.castle_time_sec,
-                    session.imperial_time_sec, session.final_pop,
-                    session.food_at_feudal, session.wood_at_feudal,
-                    session.gold_at_feudal, session.stone_at_feudal,
-                    session.result, session.accuracy_pct, session.notes,
-                    mistakes_json, session.replay_path, session.created_at,
-                    session.civ, session.map_name, session.game_mode,
-                    session.data_quality, session.eapm, session.player_name,
+                    session.build_order_id,
+                    session.date,
+                    session.duration_sec,
+                    session.feudal_time_sec,
+                    session.castle_time_sec,
+                    session.imperial_time_sec,
+                    session.final_pop,
+                    session.food_at_feudal,
+                    session.wood_at_feudal,
+                    session.gold_at_feudal,
+                    session.stone_at_feudal,
+                    session.result,
+                    session.accuracy_pct,
+                    session.notes,
+                    mistakes_json,
+                    session.replay_path,
+                    session.created_at,
+                    session.civ,
+                    session.map_name,
+                    session.game_mode,
+                    session.data_quality,
+                    session.eapm,
+                    session.player_name,
                     session.insights_json,
                 ),
             )
@@ -112,11 +129,21 @@ def save_session(session: Session) -> Session:
                    result=?, accuracy_pct=?, notes=?, mistakes_json=?, replay_path=?
                    WHERE id=?""",
                 (
-                    session.duration_sec, session.feudal_time_sec, session.castle_time_sec,
-                    session.imperial_time_sec, session.final_pop, session.food_at_feudal,
-                    session.wood_at_feudal, session.gold_at_feudal, session.stone_at_feudal,
-                    session.result, session.accuracy_pct, session.notes,
-                    mistakes_json, session.replay_path, session.id,
+                    session.duration_sec,
+                    session.feudal_time_sec,
+                    session.castle_time_sec,
+                    session.imperial_time_sec,
+                    session.final_pop,
+                    session.food_at_feudal,
+                    session.wood_at_feudal,
+                    session.gold_at_feudal,
+                    session.stone_at_feudal,
+                    session.result,
+                    session.accuracy_pct,
+                    session.notes,
+                    mistakes_json,
+                    session.replay_path,
+                    session.id,
                 ),
             )
             logger.info("Session %d updated", session.id)
@@ -150,6 +177,7 @@ def delete_session(session_id: int) -> bool:
 # ---------------------------------------------------------------------------
 # Read operations
 # ---------------------------------------------------------------------------
+
 
 def get_sessions(
     *,
@@ -189,7 +217,7 @@ def get_sessions(
         params.append(date_to)
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-    sql   = f"SELECT * FROM sessions {where} ORDER BY created_at DESC LIMIT ?"
+    sql = f"SELECT * FROM sessions {where} ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
 
     with db_conn() as conn:
@@ -209,9 +237,12 @@ def get_session(session_id: int) -> Optional[Session]:
         ).fetchall()
     session.milestones = [
         Milestone(
-            id=m["id"], session_id=m["session_id"],
-            label=m["label"], game_time_sec=m["game_time_sec"],
-            wall_time=m["wall_time"] or "", value=m["value"],
+            id=m["id"],
+            session_id=m["session_id"],
+            label=m["label"],
+            game_time_sec=m["game_time_sec"],
+            wall_time=m["wall_time"] or "",
+            value=m["value"],
         )
         for m in ms_rows
     ]
@@ -285,9 +316,7 @@ def get_summary_stats(build_order_id: Optional[int] = None) -> dict:
 
     d = dict(row) if row else {}
     d["win_rate"] = (
-        round(d["wins"] / d["total_sessions"] * 100, 1)
-        if d.get("total_sessions")
-        else 0.0
+        round(d["wins"] / d["total_sessions"] * 100, 1) if d.get("total_sessions") else 0.0
     )
     return d
 
@@ -351,6 +380,7 @@ def get_activity_heatmap(year: Optional[int] = None) -> dict[str, int]:
     Defaults to current year.
     """
     from datetime import date
+
     yr = year or date.today().year
     with db_conn() as conn:
         rows = conn.execute(
@@ -364,6 +394,7 @@ def get_activity_heatmap(year: Optional[int] = None) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _row_to_session(row: dict) -> Session:
     return Session(

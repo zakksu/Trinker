@@ -5,7 +5,7 @@
 
 STEP 1 — First-time setup (run once):
   Double-click: INSTALL_WINDOWS.bat
-  
+
   This will:
     • Check Python is installed
     • Install all required libraries
@@ -87,7 +87,7 @@ AI COACH (OPTIONAL)
 --------------------------------------------------
 For AI coaching features, install Ollama:
   https://ollama.ai
-  
+
 Then in TRINKER → Settings → AI Coaching, enable it
 and click "Test Connection".
 

@@ -2,14 +2,15 @@
 TRINKER 2.0 - Purge messy sessions and re-import multiplayer replays.
 Run once after upgrading: python scripts/rebuild_data.py
 """
+
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.core.database import init_db
 from src.analytics.session import purge_low_quality_sessions
+from src.core.database import init_db
 from src.replay.bulk_import import import_all_replays
 from src.replay.parser import find_replay_files
 

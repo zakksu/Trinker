@@ -13,11 +13,18 @@ Design goals:
 
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPoint, Signal, QTimer, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QFont, QColor, QPalette, QKeySequence
+from PySide6.QtCore import QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSizeGrip, QFrame, QProgressBar, QTabWidget, QGridLayout,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QSizeGrip,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..build_orders.models import BuildOrder, BuildStep
@@ -25,23 +32,22 @@ from ..build_orders.step_timer import compute_step_timing
 from ..core.config import settings
 from ..core.logger import logger
 
-
 # ---------------------------------------------------------------------------
 # Status colors (traffic-light system)
 # ---------------------------------------------------------------------------
 
 STATUS_COLORS = {
-    "green":  "#2ecc71",
+    "green": "#2ecc71",
     "yellow": "#f1c40f",
-    "red":    "#e74c3c",
+    "red": "#e74c3c",
     "neutral": "#95a5a6",
 }
 
-DARK_BG    = "rgba(18, 18, 20, {alpha})"
-STEP_BG    = "#1e1e22"
+DARK_BG = "rgba(18, 18, 20, {alpha})"
+STEP_BG = "#1e1e22"
 TEXT_COLOR = "#ecf0f1"
-DIM_COLOR  = "#7f8c8d"
-ACCENT     = "#3498db"
+DIM_COLOR = "#7f8c8d"
+ACCENT = "#3498db"
 NEXT_ACCENT = "#2ecc71"
 
 
@@ -92,12 +98,12 @@ class ResourcePanel(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"""
-            ResourcePanel {{
+        self.setStyleSheet("""
+            ResourcePanel {
                 background: #16161a;
                 border: 1px solid #2c2c2e;
                 border-radius: 8px;
-            }}
+            }
         """)
         grid = QGridLayout(self)
         grid.setContentsMargins(10, 10, 10, 10)
@@ -122,7 +128,7 @@ class ResourcePanel(QFrame):
             box.addWidget(lbl_v)
             w = QFrame()
             w.setLayout(box)
-            w.setStyleSheet(f"background: #1a1a20; border-radius: 6px; padding: 4px;")
+            w.setStyleSheet("background: #1a1a20; border-radius: 6px; padding: 4px;")
             grid.addWidget(w, row, col)
             self._cells[key] = lbl_v
 
@@ -177,9 +183,7 @@ class NextStepBanner(QFrame):
 
         self.lbl_desc = QLabel("—")
         self.lbl_desc.setWordWrap(True)
-        self.lbl_desc.setStyleSheet(
-            f"color: #ecf0f1; font-size: 12px; font-weight: bold;"
-        )
+        self.lbl_desc.setStyleSheet("color: #ecf0f1; font-size: 12px; font-weight: bold;")
         layout.addWidget(self.lbl_desc)
 
     def set_step(self, step: Optional[BuildStep]) -> None:
@@ -201,7 +205,7 @@ class StepCard(QFrame):
 
     def _setup_ui(self) -> None:
         border_color = ACCENT if self.is_current else "#2c2c2e"
-        bg           = STEP_BG if self.is_current else "#16161a"
+        bg = STEP_BG if self.is_current else "#16161a"
         self.setStyleSheet(f"""
             StepCard {{
                 background: {bg};
@@ -224,7 +228,7 @@ class StepCard(QFrame):
         self.lbl_time.setStyleSheet(f"color: {ACCENT}; font-size: 11px; font-weight: bold;")
         self.lbl_time.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.lbl_pop = QLabel("")
-        self.lbl_pop.setStyleSheet(f"color: #e67e22; font-size: 11px; font-weight: bold;")
+        self.lbl_pop.setStyleSheet("color: #e67e22; font-size: 11px; font-weight: bold;")
         header_row.addWidget(self.lbl_index)
         header_row.addWidget(self.lbl_pop)
         header_row.addStretch()
@@ -263,10 +267,14 @@ class StepCard(QFrame):
         self.lbl_pop.setText(f"👥 {step.population}" if step.population else "")
 
         res_parts = []
-        if step.food  is not None: res_parts.append(f"🌾{step.food}")
-        if step.wood  is not None: res_parts.append(f"🪵{step.wood}")
-        if step.gold  is not None: res_parts.append(f"🪙{step.gold}")
-        if step.stone is not None: res_parts.append(f"🪨{step.stone}")
+        if step.food is not None:
+            res_parts.append(f"🌾{step.food}")
+        if step.wood is not None:
+            res_parts.append(f"🪵{step.wood}")
+        if step.gold is not None:
+            res_parts.append(f"🪙{step.gold}")
+        if step.stone is not None:
+            res_parts.append(f"🪨{step.stone}")
         self.lbl_resources.setText("  ".join(res_parts))
         self.lbl_resources.setVisible(bool(res_parts))
 
@@ -275,8 +283,10 @@ class StepCard(QFrame):
 
         if step.age:
             age_colors = {
-                "feudal": "#e67e22", "castle": "#9b59b6",
-                "imperial": "#e74c3c", "dark": "#7f8c8d",
+                "feudal": "#e67e22",
+                "castle": "#9b59b6",
+                "imperial": "#e74c3c",
+                "dark": "#7f8c8d",
             }
             color = age_colors.get(step.age.lower(), ACCENT)
             self.lbl_index.setText(f"▶ {step.age.upper()} AGE")
@@ -285,10 +295,12 @@ class StepCard(QFrame):
     def set_status(self, status: str = "neutral") -> None:
         """Update left border color based on timing status."""
         color = STATUS_COLORS.get(status, STATUS_COLORS["neutral"])
-        self.setStyleSheet(self.styleSheet().replace(
-            f"border: 1px solid {ACCENT}",
-            f"border-left: 3px solid {color}",
-        ))
+        self.setStyleSheet(
+            self.styleSheet().replace(
+                f"border: 1px solid {ACCENT}",
+                f"border-left: 3px solid {color}",
+            )
+        )
 
 
 class BuildOrderOverlay(QWidget):
@@ -302,15 +314,15 @@ class BuildOrderOverlay(QWidget):
         closed:            Window was closed.
     """
 
-    step_changed    = Signal(int)
+    step_changed = Signal(int)
     session_started = Signal()
     session_stopped = Signal()
-    closed          = Signal()
+    closed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._build_order: Optional[BuildOrder] = None
-        self._current_index = 0          # 0-based index into steps list
+        self._current_index = 0  # 0-based index into steps list
         self._is_session_active = False
         self._timer_paused = False
         self._manual_pause = False
@@ -353,12 +365,12 @@ class BuildOrderOverlay(QWidget):
 
         # ── Container frame (gets background color) ────────────────────────
         self.container = QFrame(self)
-        self.container.setStyleSheet(f"""
-            QFrame {{
+        self.container.setStyleSheet("""
+            QFrame {
                 background: rgba(14, 14, 16, 0.92);
                 border: 1px solid #2c2c2e;
                 border-radius: 12px;
-            }}
+            }
         """)
         root.addWidget(self.container)
 

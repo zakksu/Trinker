@@ -12,9 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .parser import ReplayInfo, ReplayParser, parse_replay, CIV_MAP
-from ..core.logger import logger
-
 # AoE2 DE research IDs (approximate) — Feudal=101, Castle=102, Imperial=103 in some builds
 _AGE_RESEARCH_MARKERS = {
     b"Feudal Age": "feudal",
@@ -26,6 +23,7 @@ _AGE_RESEARCH_MARKERS = {
 @dataclass
 class ReplayAnalysis:
     """Extracted metrics from a replay for session auto-fill."""
+
     replay_path: str
     civ: str = "Unknown"
     map_name: str = "Unknown"
@@ -37,14 +35,18 @@ class ReplayAnalysis:
     is_multiplayer: bool = False
     is_ranked: bool = False
     recorded_at: str = ""
-    confidence: str = "low"       # low | medium | high
+    confidence: str = "low"  # low | medium | high
     parse_errors: list[str] = field(default_factory=list)
     source_label: str = ""
 
     def has_timings(self) -> bool:
-        return any([
-            self.feudal_time_sec, self.castle_time_sec, self.imperial_time_sec,
-        ])
+        return any(
+            [
+                self.feudal_time_sec,
+                self.castle_time_sec,
+                self.imperial_time_sec,
+            ]
+        )
 
 
 def _parse_filename_metadata(path: Path) -> dict:
@@ -66,7 +68,14 @@ def _scan_age_times(data: bytes) -> dict[str, int]:
     Scan replay binary for age-up timing hints.
     Uses strict realistic windows — rejects garbage like 0:23 feudal.
     """
-    from .validate import FEUDAL_MIN, FEUDAL_MAX, CASTLE_MIN, CASTLE_MAX, IMPERIAL_MIN, IMPERIAL_MAX
+    from .validate import (
+        CASTLE_MAX,
+        CASTLE_MIN,
+        FEUDAL_MAX,
+        FEUDAL_MIN,
+        IMPERIAL_MAX,
+        IMPERIAL_MIN,
+    )
 
     ranges = {
         "feudal": (FEUDAL_MIN, FEUDAL_MAX),

@@ -8,9 +8,8 @@ from __future__ import annotations
 from collections import Counter
 from typing import Optional
 
+from ..build_orders.manager import get_all_build_orders, get_build_order
 from .session import get_sessions, get_summary_stats
-from ..build_orders.manager import get_build_order, get_all_build_orders
-from ..core.database import db_conn
 
 
 def _mmss(sec: Optional[float]) -> str:
@@ -22,31 +21,52 @@ def _mmss(sec: Optional[float]) -> str:
 
 def get_civ_history(civ: str, limit: int = 50) -> list[dict]:
     """Sessions for builds matching a civilization."""
-    bos = {b.id: b for b in get_all_build_orders() if b.civ.lower() == civ.lower() or b.civ == "Any"}
+    bos = {
+        b.id: b for b in get_all_build_orders() if b.civ.lower() == civ.lower() or b.civ == "Any"
+    }
     sessions = get_sessions(limit=limit)
     rows = []
     for s in sessions:
         if s.build_order_id not in bos:
             continue
         bo = bos[s.build_order_id]
-        rows.append({
-            "date": s.date,
-            "build": bo.name,
-            "feudal": s.feudal_time_sec,
-            "castle": s.castle_time_sec,
-            "accuracy": s.accuracy_pct,
-            "result": s.result,
-            "notes": s.notes,
-        })
+        rows.append(
+            {
+                "date": s.date,
+                "build": bo.name,
+                "feudal": s.feudal_time_sec,
+                "castle": s.castle_time_sec,
+                "accuracy": s.accuracy_pct,
+                "result": s.result,
+                "notes": s.notes,
+            }
+        )
     return rows
 
 
 _AUTO_NOTE_MARKERS = ("bulk import", "auto-filled", "[rejected]", "[low]")
-_STOPWORDS = frozenset({
-    "import", "replay", "timing", "timings", "detected", "confidence",
-    "bulk", "from", "auto", "filled", "practice", "unavailable", "parser",
-    "pending", "unknown", "medium", "high", "rejected",
-})
+_STOPWORDS = frozenset(
+    {
+        "import",
+        "replay",
+        "timing",
+        "timings",
+        "detected",
+        "confidence",
+        "bulk",
+        "from",
+        "auto",
+        "filled",
+        "practice",
+        "unavailable",
+        "parser",
+        "pending",
+        "unknown",
+        "medium",
+        "high",
+        "rejected",
+    }
+)
 
 
 def get_recurring_themes(limit: int = 100) -> list[tuple[str, int]]:
@@ -57,9 +77,25 @@ def get_recurring_themes(limit: int = 100) -> list[tuple[str, int]]:
     sessions = get_sessions(limit=limit)
     keywords = Counter()
     themes = [
-        "idle", "late feudal", "late castle", "forgot", "house", "boar",
-        "scouts", "military", "gold", "wood", "food", "wall", "loom",
-        "idle tc", "barracks", "behind", "slow", "lure", "feudal",
+        "idle",
+        "late feudal",
+        "late castle",
+        "forgot",
+        "house",
+        "boar",
+        "scouts",
+        "military",
+        "gold",
+        "wood",
+        "food",
+        "wall",
+        "loom",
+        "idle tc",
+        "barracks",
+        "behind",
+        "slow",
+        "lure",
+        "feudal",
     ]
     for s in sessions:
         text = (s.notes or "").lower()
@@ -125,7 +161,11 @@ def compare_to_pro_benchmark(
     castle_sec: Optional[int],
 ) -> str:
     """Compare player timings to ideal_timings DB."""
-    from ..build_orders.timings import get_benchmarks_for, evaluate_feudal_time, evaluate_castle_time
+    from ..build_orders.timings import (
+        evaluate_castle_time,
+        evaluate_feudal_time,
+        get_benchmarks_for,
+    )
 
     benchmarks = get_benchmarks_for(civ, strategy)
     if not benchmarks:

@@ -26,31 +26,32 @@ class BuildStep:
         notes:       Optional supplemental hint or context.
         age:         Dark/Feudal/Castle/Imperial (None = no age change).
     """
-    index:       int
+
+    index: int
     description: str
-    time_str:    str        = ""
-    time_sec:    int        = 0
-    population:  int        = 0
-    food:        Optional[int] = None
-    wood:        Optional[int] = None
-    gold:        Optional[int] = None
-    stone:       Optional[int] = None
-    notes:       str        = ""
-    age:         Optional[str] = None   # "Dark" | "Feudal" | "Castle" | "Imperial"
+    time_str: str = ""
+    time_sec: int = 0
+    population: int = 0
+    food: Optional[int] = None
+    wood: Optional[int] = None
+    gold: Optional[int] = None
+    stone: Optional[int] = None
+    notes: str = ""
+    age: Optional[str] = None  # "Dark" | "Feudal" | "Castle" | "Imperial"
 
     def to_dict(self) -> dict:
         return {
-            "index":       self.index,
+            "index": self.index,
             "description": self.description,
-            "time_str":    self.time_str,
-            "time_sec":    self.time_sec,
-            "population":  self.population,
-            "food":        self.food,
-            "wood":        self.wood,
-            "gold":        self.gold,
-            "stone":       self.stone,
-            "notes":       self.notes,
-            "age":         self.age,
+            "time_str": self.time_str,
+            "time_sec": self.time_sec,
+            "population": self.population,
+            "food": self.food,
+            "wood": self.wood,
+            "gold": self.gold,
+            "stone": self.stone,
+            "notes": self.notes,
+            "age": self.age,
         }
 
     @classmethod
@@ -79,20 +80,21 @@ class BuildOrder:
         created_at:  ISO-8601 creation timestamp.
         updated_at:  ISO-8601 last-modified timestamp.
     """
-    name:        str
-    civ:         str              = "Any"
-    strategy:    str              = ""
-    difficulty:  str              = "Medium"
-    tags:        list[str]        = field(default_factory=list)
-    author:      str              = ""
-    source_url:  str              = ""
-    steps:       list[BuildStep]  = field(default_factory=list)
-    notes:       str              = ""
-    is_favorite: bool             = False
-    id:          Optional[int]    = None
-    external_id: Optional[str]    = None
-    created_at:  str              = ""
-    updated_at:  str              = ""
+
+    name: str
+    civ: str = "Any"
+    strategy: str = ""
+    difficulty: str = "Medium"
+    tags: list[str] = field(default_factory=list)
+    author: str = ""
+    source_url: str = ""
+    steps: list[BuildStep] = field(default_factory=list)
+    notes: str = ""
+    is_favorite: bool = False
+    id: Optional[int] = None
+    external_id: Optional[str] = None
+    created_at: str = ""
+    updated_at: str = ""
 
     @property
     def step_count(self) -> int:
@@ -108,20 +110,20 @@ class BuildOrder:
 
     def to_dict(self) -> dict:
         return {
-            "id":          self.id,
+            "id": self.id,
             "external_id": self.external_id,
-            "name":        self.name,
-            "civ":         self.civ,
-            "strategy":    self.strategy,
-            "difficulty":  self.difficulty,
-            "tags":        self.tags,
-            "author":      self.author,
-            "source_url":  self.source_url,
-            "steps":       [s.to_dict() for s in self.steps],
-            "notes":       self.notes,
+            "name": self.name,
+            "civ": self.civ,
+            "strategy": self.strategy,
+            "difficulty": self.difficulty,
+            "tags": self.tags,
+            "author": self.author,
+            "source_url": self.source_url,
+            "steps": [s.to_dict() for s in self.steps],
+            "notes": self.notes,
             "is_favorite": self.is_favorite,
-            "created_at":  self.created_at,
-            "updated_at":  self.updated_at,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
         }
 
     @classmethod

@@ -1,4 +1,5 @@
 """Tests for post-game coach pipeline helpers."""
+
 import sys
 from pathlib import Path
 

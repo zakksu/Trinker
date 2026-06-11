@@ -14,6 +14,7 @@ from .logger import logger
 
 try:
     import requests as _requests
+
     _REQUESTS_OK = True
 except ImportError:
     _REQUESTS_OK = False

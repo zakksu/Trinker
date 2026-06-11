@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 # Realistic AoE2 age-up windows (seconds)
-FEUDAL_MIN, FEUDAL_MAX = 420, 1020      # 7:00 – 17:00
-CASTLE_MIN, CASTLE_MAX = 660, 2100      # 11:00 – 35:00
+FEUDAL_MIN, FEUDAL_MAX = 420, 1020  # 7:00 – 17:00
+CASTLE_MIN, CASTLE_MAX = 660, 2100  # 11:00 – 35:00
 IMPERIAL_MIN, IMPERIAL_MAX = 1200, 4200
 DURATION_MIN, DURATION_MAX = 300, 7200  # 5 min – 2 hours
 

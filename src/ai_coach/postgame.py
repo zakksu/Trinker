@@ -5,50 +5,17 @@ Replay → timeline → historical context → Ollama → coaching report + next
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Optional
 
-from ..analytics.history import build_historical_summary, compare_to_pro_benchmark, get_recurring_themes
-from ..build_orders.manager import get_all_build_orders
+from ..analytics.compare import compare_to_build_order
+from ..analytics.history import build_historical_summary, compare_to_pro_benchmark
 from ..core.config import settings
 from ..core.logger import logger
 from ..replay.analyzer import ReplayAnalysis, analyze_replay
-from ..replay.mgz_parser import MgzParseResult, parse_with_mgz
-from .coach import _is_ollama_available, _offline_coaching_tips
-
-try:
-    import requests as _requests
-except ImportError:
-    _requests = None
-
-
-HERA_SYSTEM_PROMPT = """You are a Hera-level Age of Empires II: DE coach. You analyze parsed replay data and practice history.
-
-Your job:
-1. Compare the player's execution to ideal pro-level Dark/Feudal/Castle transitions.
-2. Highlight MICRO decisions: TC idle time, house timing, boar lure, 2nd boar, villager assignments at age-ups, military queue gaps, scouting, walling, first military building time.
-3. Cross-reference their historical practice data for recurring mistakes.
-4. Give exactly 5 concrete, actionable improvements — each one sentence, imperative voice.
-5. Suggest ONE build order they should drill next (name it specifically).
-6. End with a single OVERLAY ALERT line (max 12 words) they must see before their next game with this build — the #1 mistake to not repeat.
-
-Format your response EXACTLY:
-## Brief Report
-(2-3 sentences max)
-
-## 5 Improvements
-1. ...
-2. ...
-3. ...
-4. ...
-5. ...
-
-## Practice Next
-Build: [name] — [one sentence why]
-
-## Overlay Alert
-[12 words or fewer — punchy reminder]"""
+from .coach import _is_ollama_available, _offline_coaching_tips, _query_ollama_chat
+from .prompt_builder import PromptBuilder
+from .summary import ReplaySummary
 
 
 @dataclass
@@ -76,29 +43,12 @@ def build_replay_timeline(path: str, analysis: Optional[ReplayAnalysis] = None) 
     return "\n".join(lines)
 
 
-def _query_ollama_chat(system: str, user: str) -> str:
-    if not _requests:
-        raise RuntimeError("requests not available")
-    payload = {
-        "model": settings.ollama_model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "stream": False,
-        "options": {"temperature": 0.25, "num_predict": 800},
-    }
-    resp = _requests.post(f"{settings.ollama_url}/api/chat", json=payload, timeout=120)
-    resp.raise_for_status()
-    return resp.json().get("message", {}).get("content", "").strip()
-
-
 def _parse_overlay_alert(report: str) -> str:
     marker = "## Overlay Alert"
     if marker.lower() not in report.lower():
         return ""
     idx = report.lower().find(marker.lower())
-    tail = report[idx + len(marker):].strip()
+    tail = report[idx + len(marker) :].strip()
     for line in tail.splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
@@ -129,24 +79,38 @@ def run_postgame_coach(
 
     historical = build_historical_summary(civ, build_order_id)
     pro_cmp = compare_to_pro_benchmark(
-        civ, strategy or "Fast Castle",
-        analysis.feudal_time_sec, analysis.castle_time_sec,
+        civ,
+        strategy or "Fast Castle",
+        analysis.feudal_time_sec,
+        analysis.castle_time_sec,
     )
+    bo_cmp = compare_to_build_order(
+        feudal_sec=analysis.feudal_time_sec,
+        castle_sec=analysis.castle_time_sec,
+        build_order_id=build_order_id,
+    )
+    cmp_lines = [f"=== Build Comparison ({bo_cmp.build_name}) ===", bo_cmp.summary]
+    for row in bo_cmp.rows:
+        cmp_lines.append(f"  {row.label}: {row.actual} vs {row.target} [{row.status}]")
 
-    user_prompt = f"""{timeline}
-
-{historical}
-
-{pro_cmp}
-
-Build practiced: {build_order_name or 'Unknown'}
-Strategy: {strategy or 'Unknown'}
-
-Analyze this game and give your coaching report."""
+    summary = ReplaySummary(
+        civ=civ,
+        build_name=build_order_name,
+        strategy=strategy or "",
+        feudal_sec=analysis.feudal_time_sec,
+        castle_sec=analysis.castle_time_sec,
+        timeline=timeline,
+        historical=historical,
+        benchmark=pro_cmp,
+        comparison="\n".join(cmp_lines),
+    )
+    system_prompt, user_prompt = PromptBuilder.postgame_coaching(summary)
 
     if not _is_ollama_available():
         offline = _offline_coaching_tips(
-            analysis.feudal_time_sec, analysis.castle_time_sec, None,
+            analysis.feudal_time_sec,
+            analysis.castle_time_sec,
+            None,
         )
         alert = "Queue vills non-stop — never idle your TC"
         if analysis.feudal_time_sec and analysis.feudal_time_sec > 600:
@@ -161,7 +125,7 @@ Analyze this game and give your coaching report."""
         )
 
     try:
-        report = _query_ollama_chat(HERA_SYSTEM_PROMPT, user_prompt)
+        report = _query_ollama_chat(system_prompt, user_prompt)
         alert = _parse_overlay_alert(report)
         suggested = _parse_suggested_build(report)
         logger.info("Post-game coach generated (%d chars)", len(report))
@@ -217,8 +181,11 @@ def create_postgame_worker(
         def run(self) -> None:
             try:
                 result = run_postgame_coach(
-                    self.replay_path, self.civ, self.strategy,
-                    self.bo_id, self.bo_name,
+                    self.replay_path,
+                    self.civ,
+                    self.strategy,
+                    self.bo_id,
+                    self.bo_name,
                 )
                 self.finished.emit(result)
             except Exception as exc:

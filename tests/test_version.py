@@ -1,4 +1,5 @@
 """Tests for version and config."""
+
 import sys
 from pathlib import Path
 

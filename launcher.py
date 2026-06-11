@@ -15,10 +15,15 @@ _ROOT = Path(__file__).parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from PySide6.QtCore import Qt, QThread, QObject, Signal, QTimer
-from PySide6.QtGui import QFont, QPixmap, QIcon
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, QProgressBar, QPushButton,
+    QApplication,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from src.core.config import get_app_version
@@ -103,13 +108,19 @@ class _LaunchWorker(QObject):
             return
         subprocess.run(
             ["git", "pull", "--ff-only"],
-            cwd=_ROOT, capture_output=True, text=True, timeout=120,
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
 
     def _pip_install(self) -> None:
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q"],
-            cwd=_ROOT, capture_output=True, text=True, timeout=300,
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=300,
         )
 
 
@@ -127,8 +138,12 @@ class TrinkerLauncher(QWidget):
 
         icon_path = _ROOT / "assets" / "trinker_icon.png"
         if icon_path.exists():
-            pix = QPixmap(str(icon_path)).scaled(72, 72, Qt.AspectRatioMode.KeepAspectRatio,
-                                                Qt.TransformationMode.SmoothTransformation)
+            pix = QPixmap(str(icon_path)).scaled(
+                72,
+                72,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
             icon_lbl = QLabel()
             icon_lbl.setPixmap(pix)
             icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)

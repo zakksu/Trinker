@@ -2,24 +2,41 @@
 Upgrade premium build orders + pro benchmarks in the TRINKER database.
 Run: python scripts/upgrade_builds.py
 """
+
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.core.database import init_db, db_conn
 from src.build_orders.detailed_builds import PREMIUM_BUILDS
 from src.build_orders.manager import import_and_save
-from src.core.logger import logger
-
+from src.core.database import db_conn, init_db
 
 BENCHMARKS = [
     # civ, strategy, pop, f_min, f_max, c_min, c_max, source, notes
-    ("Britons", "Archer Rush", 22, 555, 585, 780, 900, "Hera/community",
-     "22-pop Britons archer — Feudal ~9:15-9:45, Castle ~13:00-15:00"),
-    ("Any", "Fast Castle", 25, 570, 630, 870, 990, "aoe2.gg",
-     "21-25 pop Fast Castle — Feudal ~9:30-10:30, Castle ~15:00-16:30"),
+    (
+        "Britons",
+        "Archer Rush",
+        22,
+        555,
+        585,
+        780,
+        900,
+        "Hera/community",
+        "22-pop Britons archer — Feudal ~9:15-9:45, Castle ~13:00-15:00",
+    ),
+    (
+        "Any",
+        "Fast Castle",
+        25,
+        570,
+        630,
+        870,
+        990,
+        "aoe2.gg",
+        "21-25 pop Fast Castle — Feudal ~9:30-10:30, Castle ~15:00-16:30",
+    ),
 ]
 
 

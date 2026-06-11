@@ -5,6 +5,7 @@ Called by UPDATE_EXE.bat before launching the packaged app.
 Usage:
     python scripts/check_update.py [--download]
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -19,11 +20,13 @@ from src.core.updater import check_for_update, download_exe_update
 def main() -> int:
     parser = argparse.ArgumentParser(description="TRINKER.exe update checker")
     parser.add_argument(
-        "--download", action="store_true",
+        "--download",
+        action="store_true",
         help="Download the latest TRINKER.exe if a newer release exists",
     )
     parser.add_argument(
-        "--dest", default=str(_ROOT / "dist" / "TRINKER.exe"),
+        "--dest",
+        default=str(_ROOT / "dist" / "TRINKER.exe"),
         help="Where to save the downloaded executable",
     )
     args = parser.parse_args()

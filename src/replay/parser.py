@@ -23,37 +23,80 @@ from typing import Optional
 
 from ..core.logger import logger
 
-
 # ---------------------------------------------------------------------------
 # Known civilization IDs in AoE2 DE (as of patch 78087)
 # Incomplete — covers the most common civs
 # ---------------------------------------------------------------------------
 
 CIV_MAP: dict[int, str] = {
-    1: "Britons",   2: "Franks",    3: "Goths",    4: "Teutons",
-    5: "Japanese",  6: "Chinese",   7: "Byzantines", 8: "Persians",
-    9: "Saracens",  10: "Turks",   11: "Vikings",  12: "Mongols",
-    13: "Celts",    14: "Spanish",  15: "Aztecs",   16: "Mayans",
-    17: "Huns",     18: "Koreans",  19: "Italians", 20: "Indians",
-    21: "Incas",    22: "Magyars",  23: "Slavs",    24: "Portuguese",
-    25: "Ethiopian", 26: "Malians", 27: "Berbers",  28: "Khmer",
-    29: "Malay",    30: "Burmese",  31: "Vietnamese", 32: "Bulgarians",
-    33: "Tatars",   34: "Cumans",   35: "Lithuanians", 36: "Teutons",
-    38: "Poles",    39: "Bohemians", 40: "Dravidians", 41: "Gurjaras",
-    42: "Romans",   43: "Bengalis", 44: "Sicilians",
+    1: "Britons",
+    2: "Franks",
+    3: "Goths",
+    4: "Teutons",
+    5: "Japanese",
+    6: "Chinese",
+    7: "Byzantines",
+    8: "Persians",
+    9: "Saracens",
+    10: "Turks",
+    11: "Vikings",
+    12: "Mongols",
+    13: "Celts",
+    14: "Spanish",
+    15: "Aztecs",
+    16: "Mayans",
+    17: "Huns",
+    18: "Koreans",
+    19: "Italians",
+    20: "Indians",
+    21: "Incas",
+    22: "Magyars",
+    23: "Slavs",
+    24: "Portuguese",
+    25: "Ethiopian",
+    26: "Malians",
+    27: "Berbers",
+    28: "Khmer",
+    29: "Malay",
+    30: "Burmese",
+    31: "Vietnamese",
+    32: "Bulgarians",
+    33: "Tatars",
+    34: "Cumans",
+    35: "Lithuanians",
+    36: "Teutons",
+    38: "Poles",
+    39: "Bohemians",
+    40: "Dravidians",
+    41: "Gurjaras",
+    42: "Romans",
+    43: "Bengalis",
+    44: "Sicilians",
 }
 
 MAP_NAMES: dict[int, str] = {
-    9: "Arabia",  10: "Archipelago", 11: "Baltic", 12: "Black Forest",
-    13: "Coastal", 14: "Continental", 19: "Gold Rush", 29: "Highland",
-    33: "Islands", 72: "Arena",       74: "Ghost Lake", 75: "Migration",
-    78: "Nomad",   121: "Four Lakes", 140: "Hideout",
+    9: "Arabia",
+    10: "Archipelago",
+    11: "Baltic",
+    12: "Black Forest",
+    13: "Coastal",
+    14: "Continental",
+    19: "Gold Rush",
+    29: "Highland",
+    33: "Islands",
+    72: "Arena",
+    74: "Ghost Lake",
+    75: "Migration",
+    78: "Nomad",
+    121: "Four Lakes",
+    140: "Hideout",
 }
 
 
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ReplayInfo:
@@ -68,12 +111,13 @@ class ReplayInfo:
         players:         List of player info dicts.
         parse_errors:    Non-fatal warnings encountered during parsing.
     """
-    file_path:    str
-    game_version: str           = ""
-    duration_sec: int           = 0
-    map_name:     str           = "Unknown"
-    players:      list[dict]    = field(default_factory=list)
-    parse_errors: list[str]     = field(default_factory=list)
+
+    file_path: str
+    game_version: str = ""
+    duration_sec: int = 0
+    map_name: str = "Unknown"
+    players: list[dict] = field(default_factory=list)
+    parse_errors: list[str] = field(default_factory=list)
 
     def primary_player(self) -> Optional[dict]:
         """Return the first human player entry, or None."""
@@ -89,6 +133,7 @@ class ReplayInfo:
 # Parser
 # ---------------------------------------------------------------------------
 
+
 class ReplayParser:
     """
     Stateful parser for .aoe2record binary files.
@@ -97,7 +142,7 @@ class ReplayParser:
 
     # Byte offsets are approximate and may shift between game versions
     _HEADER_MAGIC = b"VER "
-    _MIN_FILE_SIZE = 4096   # sanity check
+    _MIN_FILE_SIZE = 4096  # sanity check
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -136,8 +181,11 @@ class ReplayParser:
 
         logger.info(
             "Parsed replay: %s | %s | %ds | %d players | errors=%d",
-            self.path.name, info.game_version, info.duration_sec,
-            len(info.players), len(info.parse_errors),
+            self.path.name,
+            info.game_version,
+            info.duration_sec,
+            len(info.players),
+            len(info.parse_errors),
         )
         return info
 
@@ -187,17 +235,20 @@ class ReplayParser:
                     break
 
         for idx, civ_id in enumerate(found_civs):
-            info.players.append({
-                "index":  idx,
-                "civ_id": civ_id,
-                "civ":    CIV_MAP.get(civ_id, f"Unknown({civ_id})"),
-                "human":  idx == 0,   # assume first detected player is the human
-            })
+            info.players.append(
+                {
+                    "index": idx,
+                    "civ_id": civ_id,
+                    "civ": CIV_MAP.get(civ_id, f"Unknown({civ_id})"),
+                    "human": idx == 0,  # assume first detected player is the human
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def parse_replay(path: str | Path) -> ReplayInfo:
     """
@@ -237,15 +288,14 @@ def get_latest_replay() -> Optional[Path]:
 
 def find_replay_files() -> list[Path]:
     """
-    Search default AoE2 DE replay directories for .aoe2record files.
+    Search AoE2 DE replay directories for .aoe2record files.
     Returns all found files, sorted newest first.
     """
-    from ..core.config import AO2_REPLAY_DIRS
+    from ..core.config import get_replay_search_dirs
 
     found: list[Path] = []
-    for base in AO2_REPLAY_DIRS:
-        if base.exists():
-            found.extend(base.rglob("*.aoe2record"))
+    for base in get_replay_search_dirs():
+        found.extend(base.rglob("*.aoe2record"))
 
     # Sort by modification time descending (newest first)
     found.sort(key=lambda p: p.stat().st_mtime, reverse=True)

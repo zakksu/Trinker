@@ -7,40 +7,28 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QComboBox, QGroupBox, QFormLayout, QSlider, QCheckBox, QSpinBox,
-    QFrame, QScrollArea, QMessageBox, QDoubleSpinBox,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSlider,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
-from ..core.config import settings, DATA_DIR, LOG_DIR, EXPORT_DIR
+from ..core.config import DATA_DIR, EXPORT_DIR, LOG_DIR, settings
+from ..core.hotkeys import normalize_key_sequence, validate_hotkey_set
 from ..core.logger import logger
-
-STYLE = """
-QWidget { background: #111113; color: #ecf0f1; }
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-    background: #1e1e22; border: 1px solid #2c2c2e;
-    border-radius: 6px; padding: 5px 8px; color: #ecf0f1;
-}
-QGroupBox {
-    border: 1px solid #2c2c2e; border-radius: 8px;
-    margin-top: 10px; padding: 12px 10px 10px 10px;
-}
-QGroupBox::title { color: #7f8c8d; padding: 0 8px; font-size: 11px; letter-spacing: 1px; }
-QPushButton {
-    background: #1e1e22; border: 1px solid #2c2c2e;
-    border-radius: 6px; padding: 6px 14px; color: #ecf0f1;
-}
-QPushButton:hover { background: #25252c; border-color: #3498db; }
-QCheckBox { color: #ecf0f1; spacing: 8px; }
-QSlider::groove:horizontal {
-    background: #2c2c2e; height: 6px; border-radius: 3px;
-}
-QSlider::handle:horizontal {
-    background: #3498db; width: 16px; height: 16px; margin: -5px 0;
-    border-radius: 8px;
-}
-QSlider::sub-page:horizontal { background: #3498db; border-radius: 3px; }
-"""
+from .hotkey_editor import HotkeyCaptureLineEdit
+from .notifications import show_toast
+from .theme import apply_tab_panel, get_tokens
 
 
 class SettingsTab(QWidget):
@@ -52,12 +40,24 @@ class SettingsTab(QWidget):
     """
 
     settings_changed = Signal()
+    theme_preview_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(STYLE)
         self._setup_ui()
+        self.apply_theme()
         self._populate()
+
+    def apply_theme(self, theme_name: str | None = None) -> None:
+        apply_tab_panel(self)
+        t = get_tokens(theme_name)
+        if hasattr(self, "btn_save"):
+            self.btn_save.setStyleSheet(
+                f"QPushButton {{ background: {t.selection}; color: {t.text_title}; "
+                f"border: 1px solid {t.accent}; border-radius: 6px; padding: 8px 24px; "
+                f"font-weight: bold; font-size: 13px; }}"
+                f"QPushButton:hover {{ background: {t.accent_soft}; }}"
+            )
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -78,6 +78,7 @@ class SettingsTab(QWidget):
 
         self.cb_theme = QComboBox()
         self.cb_theme.addItems(["dark", "light"])
+        self.cb_theme.currentTextChanged.connect(self.theme_preview_changed.emit)
         appear_form.addRow("Theme", self.cb_theme)
 
         self.sp_font = QSpinBox()
@@ -85,8 +86,19 @@ class SettingsTab(QWidget):
         self.sp_font.setSuffix(" px")
         appear_form.addRow("Font Size", self.sp_font)
 
-        self.chk_simple_mode = QCheckBox("Simple mode — hide advanced Practice panels (recommended)")
+        self.chk_simple_mode = QCheckBox(
+            "Simple mode — hide advanced Practice panels (recommended)"
+        )
         appear_form.addRow("", self.chk_simple_mode)
+
+        self.ed_steam_id = QLineEdit()
+        self.ed_steam_id.setPlaceholderText("Optional — for future ladder imports")
+        appear_form.addRow("Steam ID", self.ed_steam_id)
+
+        self.ed_replay_dir = QLineEdit()
+        self.ed_replay_dir.setPlaceholderText("Extra replay folder (optional)")
+        appear_form.addRow("Replay folder", self.ed_replay_dir)
+
         layout.addWidget(appear_group)
 
         # ── Overlay ───────────────────────────────────────────────────────
@@ -99,9 +111,7 @@ class SettingsTab(QWidget):
         self.slider_opacity.setRange(20, 100)
         self.slider_opacity.setTickInterval(5)
         self.lbl_opacity_val = QLabel("88%")
-        self.slider_opacity.valueChanged.connect(
-            lambda v: self.lbl_opacity_val.setText(f"{v}%")
-        )
+        self.slider_opacity.valueChanged.connect(lambda v: self.lbl_opacity_val.setText(f"{v}%"))
         opacity_row.addWidget(self.slider_opacity)
         opacity_row.addWidget(self.lbl_opacity_val)
         overlay_form.addRow("Opacity", opacity_row)
@@ -120,7 +130,9 @@ class SettingsTab(QWidget):
         self.chk_sync_pause = QCheckBox("Pause overlay timer when AoE2 is paused")
         overlay_form.addRow("", self.chk_sync_pause)
 
-        self.chk_auto_replay = QCheckBox("Prompt to import last replay after a new game (manual mode)")
+        self.chk_auto_replay = QCheckBox(
+            "Prompt to import last replay after a new game (manual mode)"
+        )
         overlay_form.addRow("", self.chk_auto_replay)
 
         self.chk_postgame_coach = QCheckBox("Auto-run post-game AI coach after replay import")
@@ -135,17 +147,19 @@ class SettingsTab(QWidget):
         hotkey_form = QFormLayout(hotkey_group)
         hotkey_form.setSpacing(10)
 
-        self.ed_hotkey_next    = QLineEdit(); self.ed_hotkey_next.setPlaceholderText("e.g. Ctrl+Right")
-        self.ed_hotkey_prev    = QLineEdit(); self.ed_hotkey_prev.setPlaceholderText("e.g. Ctrl+Left")
-        self.ed_hotkey_overlay = QLineEdit(); self.ed_hotkey_overlay.setPlaceholderText("e.g. Ctrl+Shift+O")
-        self.ed_hotkey_session = QLineEdit(); self.ed_hotkey_session.setPlaceholderText("e.g. Ctrl+Shift+S")
+        self.ed_hotkey_next = HotkeyCaptureLineEdit("e.g. Ctrl+Right")
+        self.ed_hotkey_prev = HotkeyCaptureLineEdit("e.g. Ctrl+Left")
+        self.ed_hotkey_overlay = HotkeyCaptureLineEdit("e.g. Ctrl+Shift+O")
+        self.ed_hotkey_session = HotkeyCaptureLineEdit("e.g. Ctrl+Shift+S")
 
-        hotkey_form.addRow("Next Step",       self.ed_hotkey_next)
-        hotkey_form.addRow("Previous Step",   self.ed_hotkey_prev)
-        hotkey_form.addRow("Toggle Overlay",  self.ed_hotkey_overlay)
+        hotkey_form.addRow("Next Step", self.ed_hotkey_next)
+        hotkey_form.addRow("Previous Step", self.ed_hotkey_prev)
+        hotkey_form.addRow("Toggle Overlay", self.ed_hotkey_overlay)
         hotkey_form.addRow("Pause/Resume Overlay Timer", self.ed_hotkey_session)
 
-        hotkey_hint = QLabel("Note: Hotkeys require the app window to be focused on most platforms.")
+        hotkey_hint = QLabel(
+            "Click a field, then press the key combination. Hotkeys work when TRINKER is focused."
+        )
         hotkey_hint.setStyleSheet("color: #7f8c8d; font-size: 10px;")
         hotkey_hint.setWordWrap(True)
         layout.addWidget(hotkey_group)
@@ -153,7 +167,7 @@ class SettingsTab(QWidget):
 
         # ── AI Coaching ───────────────────────────────────────────────────
         ai_group = QGroupBox("AI Coaching (requires Ollama)")
-        ai_form  = QFormLayout(ai_group)
+        ai_form = QFormLayout(ai_group)
         ai_form.setSpacing(10)
 
         self.chk_ai_enabled = QCheckBox("Enable AI Coach (auto-enabled when Ollama is running)")
@@ -182,7 +196,7 @@ class SettingsTab(QWidget):
 
         # ── Privacy ───────────────────────────────────────────────────────
         privacy_group = QGroupBox("Privacy")
-        privacy_form  = QFormLayout(privacy_group)
+        privacy_form = QFormLayout(privacy_group)
         self.chk_telemetry = QCheckBox("Allow anonymous usage telemetry (opt-in)")
         self.chk_telemetry.setStyleSheet("color: #ecf0f1;")
         privacy_form.addRow("", self.chk_telemetry)
@@ -214,18 +228,14 @@ class SettingsTab(QWidget):
             return row
 
         data_layout.addLayout(_path_row("Data directory", DATA_DIR))
-        data_layout.addLayout(_path_row("Logs",           LOG_DIR))
-        data_layout.addLayout(_path_row("Exports",        EXPORT_DIR))
+        data_layout.addLayout(_path_row("Logs", LOG_DIR))
+        data_layout.addLayout(_path_row("Exports", EXPORT_DIR))
         layout.addWidget(data_group)
 
         # ── Save button ───────────────────────────────────────────────────
         save_row = QHBoxLayout()
         btn_save = QPushButton("💾 Save Settings")
-        btn_save.setStyleSheet(
-            "QPushButton { background: #1c3a5c; color: #3498db; border: 1px solid #2c5a8c; "
-            "border-radius: 6px; padding: 8px 24px; font-weight: bold; font-size: 13px; }"
-            "QPushButton:hover { background: #264d7a; }"
-        )
+        self.btn_save = btn_save
         btn_save.clicked.connect(self._save)
         btn_reset = QPushButton("↺ Reset to Defaults")
         btn_reset.clicked.connect(self._reset_defaults)
@@ -252,50 +262,71 @@ class SettingsTab(QWidget):
         self.chk_postgame_coach.setChecked(settings.auto_postgame_coach)
         self.chk_ocr.setChecked(settings.ocr_capture_enabled)
         self.chk_simple_mode.setChecked(settings.simple_mode)
-        self.ed_hotkey_next.setText(settings.hotkey_next_step)
-        self.ed_hotkey_prev.setText(settings.hotkey_prev_step)
-        self.ed_hotkey_overlay.setText(settings.hotkey_toggle_overlay)
-        self.ed_hotkey_session.setText(settings.hotkey_start_session)
+        self.ed_steam_id.setText(settings.steam_id)
+        if settings.replay_dirs:
+            self.ed_replay_dir.setText(settings.replay_dirs[0])
+        self.ed_hotkey_next.set_hotkey(settings.hotkey_next_step)
+        self.ed_hotkey_prev.set_hotkey(settings.hotkey_prev_step)
+        self.ed_hotkey_overlay.set_hotkey(settings.hotkey_toggle_overlay)
+        self.ed_hotkey_session.set_hotkey(settings.hotkey_start_session)
         self.chk_ai_enabled.setChecked(settings.ai_coach_enabled)
         self.ed_ollama_url.setText(settings.ollama_url)
         self.ed_ollama_model.setText(settings.ollama_model)
         self.chk_telemetry.setChecked(settings.telemetry_opt_in)
 
     def _save(self) -> None:
-        settings.theme          = self.cb_theme.currentText()
-        settings.font_size      = self.sp_font.value()
+        hotkeys = {
+            "next_step": self.ed_hotkey_next.hotkey(),
+            "prev_step": self.ed_hotkey_prev.hotkey(),
+            "toggle_overlay": self.ed_hotkey_overlay.hotkey(),
+            "pause_timer": self.ed_hotkey_session.hotkey(),
+        }
+        errors = validate_hotkey_set(hotkeys)
+        if errors:
+            show_toast(errors[0], "error", 6000)
+            QMessageBox.warning(self, "Invalid Hotkeys", "\n".join(errors))
+            return
+
+        settings.theme = self.cb_theme.currentText()
+        settings.font_size = self.sp_font.value()
         settings.overlay_opacity = self.slider_opacity.value() / 100.0
-        settings.show_timings   = self.chk_show_timings.isChecked()
-        settings.auto_advance   = self.chk_auto_advance.isChecked()
+        settings.show_timings = self.chk_show_timings.isChecked()
+        settings.auto_advance = self.chk_auto_advance.isChecked()
         settings.auto_detect_sessions = self.chk_auto_detect.isChecked()
         settings.overlay_sync_game_pause = self.chk_sync_pause.isChecked()
         settings.auto_prompt_new_replay = self.chk_auto_replay.isChecked()
         settings.auto_postgame_coach = self.chk_postgame_coach.isChecked()
         settings.ocr_capture_enabled = self.chk_ocr.isChecked()
         settings.simple_mode = self.chk_simple_mode.isChecked()
-        settings.hotkey_next_step      = self.ed_hotkey_next.text().strip()
-        settings.hotkey_prev_step      = self.ed_hotkey_prev.text().strip()
-        settings.hotkey_toggle_overlay = self.ed_hotkey_overlay.text().strip()
-        settings.hotkey_start_session  = self.ed_hotkey_session.text().strip()
+        settings.steam_id = self.ed_steam_id.text().strip()
+        extra = self.ed_replay_dir.text().strip()
+        if extra:
+            from pathlib import Path
+
+            settings.replay_dirs = [str(Path(extra).resolve())]
+        settings.hotkey_next_step = normalize_key_sequence(hotkeys["next_step"])
+        settings.hotkey_prev_step = normalize_key_sequence(hotkeys["prev_step"])
+        settings.hotkey_toggle_overlay = normalize_key_sequence(hotkeys["toggle_overlay"])
+        settings.hotkey_start_session = normalize_key_sequence(hotkeys["pause_timer"])
         settings.ai_coach_enabled = self.chk_ai_enabled.isChecked()
-        settings.ollama_url   = self.ed_ollama_url.text().strip() or "http://localhost:11434"
+        settings.ollama_url = self.ed_ollama_url.text().strip() or "http://localhost:11434"
         settings.ollama_model = self.ed_ollama_model.text().strip() or "llama3"
         settings.telemetry_opt_in = self.chk_telemetry.isChecked()
         settings.save()
         self.settings_changed.emit()
         logger.info("Settings saved.")
-        QMessageBox.information(self, "Saved", "Settings saved successfully.")
 
     def _reset_defaults(self) -> None:
         reply = QMessageBox.question(
-            self, "Reset Settings",
+            self,
+            "Reset Settings",
             "Reset all settings to defaults?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            from ..core.config import AppSettings, SETTINGS_FILE
+            from ..core.config import SETTINGS_FILE, AppSettings
+
             SETTINGS_FILE.unlink(missing_ok=True)
-            import importlib, src.core.config as cfg_mod
             # Re-create defaults in place
             defaults = AppSettings()
             for field in defaults.__dataclass_fields__:
@@ -303,28 +334,36 @@ class SettingsTab(QWidget):
             settings.save()
             self._populate()
             self.settings_changed.emit()
+            show_toast("Settings reset to defaults.", "info")
 
     def _test_ollama(self) -> None:
         url = self.ed_ollama_url.text().strip() or settings.ollama_url
         try:
             import requests
+
             resp = requests.get(f"{url}/api/tags", timeout=5)
             if resp.status_code == 200:
                 models = [m.get("name", "") for m in resp.json().get("models", [])]
-                msg = f"Connected!\nAvailable models: {', '.join(models) or 'none pulled yet'}"
+                msg = f"Connected! Models: {', '.join(models) or 'none pulled yet'}"
+                show_toast("Ollama connected.", "success")
                 QMessageBox.information(self, "Ollama Connected", msg)
             else:
+                show_toast(f"Ollama HTTP {resp.status_code}", "error")
                 QMessageBox.warning(self, "Ollama Error", f"HTTP {resp.status_code}")
         except Exception as exc:
+            show_toast("Cannot connect to Ollama.", "error")
             QMessageBox.warning(
-                self, "Cannot connect to Ollama",
-                f"{exc}\n\nMake sure Ollama is running: https://ollama.ai"
+                self,
+                "Cannot connect to Ollama",
+                f"{exc}\n\nMake sure Ollama is running: https://ollama.ai",
             )
 
 
 def _open_dir(path: Path) -> None:
     """Open a directory in the system file manager."""
-    import subprocess, sys
+    import subprocess
+    import sys
+
     path.mkdir(parents=True, exist_ok=True)
     try:
         if sys.platform == "win32":

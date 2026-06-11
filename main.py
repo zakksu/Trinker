@@ -19,13 +19,12 @@ _ROOT = Path(__file__).parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtGui import QFont, QPalette, QColor
-from PySide6.QtCore import Qt
 
-from src.core.logger import logger
+from src.core.config import get_app_version, settings
 from src.core.database import init_db
-from src.core.config import settings, get_app_version
+from src.core.logger import logger
 
 
 def _configure_app(app: QApplication) -> None:
@@ -38,6 +37,7 @@ def _configure_app(app: QApplication) -> None:
 
     # Set a clean base font
     from src.core.config import settings
+
     font = QFont("Segoe UI", settings.font_size)
     font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
     app.setFont(font)
@@ -48,9 +48,12 @@ def _configure_app(app: QApplication) -> None:
 
 def _install_exception_handler() -> None:
     """
-    Redirect unhandled exceptions to both the logger and a user-visible dialog.
+    Redirect unhandled exceptions to both the logger and a user-visible toast.
     Without this, crashes in PySide6 slots are silently swallowed on Windows.
     """
+    from src.core.config import LOG_DIR
+    from src.core.errors import user_friendly_message
+
     original_hook = sys.excepthook
 
     def _hook(exc_type, exc_value, exc_tb):
@@ -58,18 +61,21 @@ def _install_exception_handler() -> None:
             "Unhandled exception",
             exc_info=(exc_type, exc_value, exc_tb),
         )
-        msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-        # Show a message box if a QApplication exists
+        msg = user_friendly_message(exc_value)
+        detail = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         app = QApplication.instance()
         if app:
+            try:
+                from src.ui.notifications import show_toast
+
+                show_toast(msg, "error", 8000)
+            except Exception:
+                pass
             box = QMessageBox()
             box.setWindowTitle("TRINKER — Unexpected Error")
             box.setIcon(QMessageBox.Icon.Critical)
-            box.setText(
-                "<b>An unexpected error occurred.</b><br><br>"
-                "Please check the log file for details, then restart TRINKER."
-            )
-            box.setDetailedText(msg)
+            box.setText(f"<b>{msg}</b><br><br>Log file: {LOG_DIR / 'trinker.log'}")
+            box.setDetailedText(detail)
             box.exec()
         original_hook(exc_type, exc_value, exc_tb)
 
@@ -99,8 +105,14 @@ def main() -> int:
     _configure_app(app)
     _install_exception_handler()
 
-    # Step 3: Import and show the main window
-    # Import here (after QApplication creation) to avoid Qt init errors
+    # Step 3: Optional onboarding wizard, then main window
+    if not settings.onboarding_complete:
+        from src.ui.onboarding_wizard import run_onboarding
+
+        if not run_onboarding():
+            logger.info("Onboarding cancelled.")
+            return 0
+
     from src.ui.main_window import TrinkerMainWindow
 
     window = TrinkerMainWindow()
@@ -108,6 +120,7 @@ def main() -> int:
     window.raise_()
 
     from src.core.ollama import ensure_ollama_enabled
+
     ensure_ollama_enabled()
 
     logger.info("Main window shown. Entering Qt event loop.")

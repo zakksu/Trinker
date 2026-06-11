@@ -14,20 +14,54 @@ from ..core.logger import logger
 _MGZ_OK = False
 try:
     from mgz.summary import Summary
+
     _MGZ_OK = True
 except ImportError:
     Summary = None  # type: ignore
 
 CIV_NAMES = {
-    1: "Britons", 2: "Franks", 3: "Goths", 4: "Teutons", 5: "Japanese",
-    6: "Chinese", 7: "Byzantines", 8: "Persians", 9: "Saracens", 10: "Turks",
-    11: "Vikings", 12: "Mongols", 13: "Celts", 14: "Spanish", 15: "Aztecs",
-    16: "Mayans", 17: "Huns", 18: "Koreans", 19: "Italians", 20: "Hindustanis",
-    21: "Incas", 22: "Magyars", 23: "Slavs", 24: "Portuguese", 25: "Ethiopians",
-    26: "Malians", 27: "Berbers", 28: "Khmer", 29: "Malay", 30: "Burmese",
-    31: "Vietnamese", 32: "Bulgarians", 33: "Tatars", 34: "Cumans",
-    35: "Lithuanians", 38: "Poles", 39: "Bohemians", 40: "Dravidians",
-    41: "Gurjaras", 42: "Romans", 43: "Bengalis", 44: "Sicilians",
+    1: "Britons",
+    2: "Franks",
+    3: "Goths",
+    4: "Teutons",
+    5: "Japanese",
+    6: "Chinese",
+    7: "Byzantines",
+    8: "Persians",
+    9: "Saracens",
+    10: "Turks",
+    11: "Vikings",
+    12: "Mongols",
+    13: "Celts",
+    14: "Spanish",
+    15: "Aztecs",
+    16: "Mayans",
+    17: "Huns",
+    18: "Koreans",
+    19: "Italians",
+    20: "Hindustanis",
+    21: "Incas",
+    22: "Magyars",
+    23: "Slavs",
+    24: "Portuguese",
+    25: "Ethiopians",
+    26: "Malians",
+    27: "Berbers",
+    28: "Khmer",
+    29: "Malay",
+    30: "Burmese",
+    31: "Vietnamese",
+    32: "Bulgarians",
+    33: "Tatars",
+    34: "Cumans",
+    35: "Lithuanians",
+    38: "Poles",
+    39: "Bohemians",
+    40: "Dravidians",
+    41: "Gurjaras",
+    42: "Romans",
+    43: "Bengalis",
+    44: "Sicilians",
 }
 
 
@@ -52,6 +86,7 @@ class MgzPlayerStats:
 @dataclass
 class MgzParseResult:
     """Structured data extracted from mgz Summary."""
+
     success: bool = False
     parser: str = "none"
     duration_sec: int = 0

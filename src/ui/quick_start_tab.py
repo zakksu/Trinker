@@ -3,32 +3,21 @@ TRINKER - Quick Start Tab
 One-screen guided workflow so new users aren't overwhelmed.
 """
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QFrame, QMessageBox,
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..build_orders.manager import get_all_build_orders
 from ..core.config import settings
-
-STYLE = """
-QWidget { background: #111113; color: #ecf0f1; }
-QComboBox {
-    background: #1e1e22; border: 1px solid #2c2c2e;
-    border-radius: 8px; padding: 10px 12px; color: #ecf0f1; font-size: 13px;
-}
-QPushButton#primary {
-    background: #1c3a5c; color: #7ec8ff; border: 2px solid #3498db;
-    border-radius: 10px; padding: 16px 28px; font-size: 15px; font-weight: bold;
-}
-QPushButton#primary:hover { background: #254a70; }
-QPushButton#secondary {
-    background: #1e1e22; color: #ecf0f1; border: 1px solid #2c2c2e;
-    border-radius: 10px; padding: 14px 24px; font-size: 13px;
-}
-QPushButton#secondary:hover { border-color: #3498db; }
-"""
+from .theme import get_tokens, stylesheet_quick_start_primary, stylesheet_tab_panel
 
 
 class _StepCard(QFrame):
@@ -43,9 +32,7 @@ class _StepCard(QFrame):
 
         header = QHBoxLayout()
         num = QLabel(number)
-        num.setStyleSheet(
-            "color: #3498db; font-size: 22px; font-weight: bold; min-width: 36px;"
-        )
+        num.setStyleSheet("color: #3498db; font-size: 22px; font-weight: bold; min-width: 36px;")
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet("font-size: 15px; font-weight: bold;")
         header.addWidget(num)
@@ -66,33 +53,45 @@ class _StepCard(QFrame):
 class QuickStartTab(QWidget):
     """Guided 3-step loop: pick build → play with overlay → import replay."""
 
-    play_requested = Signal(object)       # BuildOrder
+    play_requested = Signal(object)  # BuildOrder
     import_replay_requested = Signal()
     bulk_import_done = Signal()
     simple_mode_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(STYLE)
         self._setup_ui()
         self._load_builds()
+        self.apply_theme()
+
+    def apply_theme(self, theme_name: str | None = None) -> None:
+        t = get_tokens(theme_name)
+        self.setStyleSheet(stylesheet_tab_panel(t) + stylesheet_quick_start_primary(t))
+        if hasattr(self, "_title_lbl"):
+            self._title_lbl.setStyleSheet(
+                f"font-size: 26px; font-weight: bold; color: {t.text_title};"
+            )
+        if hasattr(self, "_sub_lbl"):
+            self._sub_lbl.setStyleSheet(f"color: {t.text_dim}; font-size: 13px; max-width: 720px;")
+        if hasattr(self, "_footer_lbl"):
+            self._footer_lbl.setStyleSheet(
+                f"color: {t.text_muted}; font-size: 11px; margin-top: 8px;"
+            )
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 32, 40, 32)
         root.setSpacing(20)
 
-        title = QLabel("Start Here")
-        title.setStyleSheet("font-size: 26px; font-weight: bold; color: #7ec8ff;")
-        root.addWidget(title)
+        self._title_lbl = QLabel("Start Here")
+        root.addWidget(self._title_lbl)
 
-        sub = QLabel(
+        self._sub_lbl = QLabel(
             "Ignore everything else for now. Repeat this loop each game — "
             "TRINKER handles coaching, replay data, and progress tracking."
         )
-        sub.setWordWrap(True)
-        sub.setStyleSheet("color: #7f8c8d; font-size: 13px; max-width: 720px;")
-        root.addWidget(sub)
+        self._sub_lbl.setWordWrap(True)
+        root.addWidget(self._sub_lbl)
 
         root.addSpacing(8)
 
@@ -139,12 +138,11 @@ class QuickStartTab(QWidget):
         step3.body.addLayout(import_row)
         root.addWidget(step3)
 
-        footer = QLabel(
+        self._footer_lbl = QLabel(
             "You do not need to import manually. Buttons above are for catching up on old replays."
         )
-        footer.setWordWrap(True)
-        footer.setStyleSheet("color: #3a5a7a; font-size: 11px; margin-top: 8px;")
-        root.addWidget(footer)
+        self._footer_lbl.setWordWrap(True)
+        root.addWidget(self._footer_lbl)
 
         root.addStretch()
 
@@ -167,6 +165,7 @@ class QuickStartTab(QWidget):
         if bo_id is None:
             return
         from ..build_orders.manager import get_build_order
+
         bo = get_build_order(bo_id)
         if bo:
             settings.last_practice_bo_id = bo.id
@@ -183,16 +182,19 @@ class QuickStartTab(QWidget):
         count = len(find_replay_files())
         if count == 0:
             QMessageBox.information(
-                self, "No Replays",
+                self,
+                "No Replays",
                 "No .aoe2record files found in your AoE2 save folder.",
             )
             return
 
         from ..replay.parser import find_replay_files as _find
+
         total = len(_find())
 
         reply = QMessageBox.question(
-            self, "Import Past Games?",
+            self,
+            "Import Past Games?",
             f"Import up to {total} replay(s) from your AoE2 folder?\n\n"
             "(Skips already-imported games. No popups — data goes to Analytics.)",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -205,7 +207,8 @@ class QuickStartTab(QWidget):
             mp_only=False,
         )
         QMessageBox.information(
-            self, "Import Complete",
+            self,
+            "Import Complete",
             f"Imported: {result.imported}\n"
             f"Skipped (already had): {result.skipped}\n"
             f"Failed: {result.failed}\n\n"

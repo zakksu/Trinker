@@ -7,15 +7,15 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 from ..core.logger import logger
 from .analyzer import _parse_filename_metadata, _scan_age_times
 from .mgz_parser import parse_with_mgz
-from .parser import parse_replay, CIV_MAP
-from .validate import validate_timings, ValidatedTimings
+from .parser import parse_replay
+from .validate import ValidatedTimings, validate_timings
 
 # User's Steam ID folder under AoE2 DE (detect owner replay path)
 _STEAM_RE = re.compile(r"(\d{17})")
@@ -24,6 +24,7 @@ _STEAM_RE = re.compile(r"(\d{17})")
 @dataclass
 class ReplayProfile:
     """Rich, validated replay profile for storage and AI coaching."""
+
     replay_path: str
     file_name: str = ""
 
@@ -34,11 +35,11 @@ class ReplayProfile:
     owner_steam_hint: str = ""
 
     # Game context
-    game_mode: str = "unknown"   # mp | sp | unknown
+    game_mode: str = "unknown"  # mp | sp | unknown
     is_ranked: bool = False
     recorded_at: str = ""
     player_count: int = 0
-    result: str = "practice"     # win | loss | practice
+    result: str = "practice"  # win | loss | practice
 
     # Timings (validated only)
     feudal_time_sec: Optional[int] = None
@@ -63,12 +64,15 @@ class ReplayProfile:
         return bool(self.feudal_time_sec or self.castle_time_sec)
 
     def insights_json(self) -> str:
-        return json.dumps({
-            "labels": self.labels,
-            "sections": self.coach_sections,
-            "parse_source": self.parse_source,
-            "validation_issues": self.validation_issues,
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "labels": self.labels,
+                "sections": self.coach_sections,
+                "parse_source": self.parse_source,
+                "validation_issues": self.validation_issues,
+            },
+            ensure_ascii=False,
+        )
 
     def coach_context(self) -> str:
         """Structured text block for LLM prompts."""
@@ -247,7 +251,10 @@ def extract_replay_profile(path: str | Path) -> ReplayProfile:
 
     logger.info(
         "Profile %s | civ=%s quality=%s feudal=%s source=%s",
-        path.name, profile.civ, profile.data_quality,
-        profile.feudal_time_sec, profile.parse_source,
+        path.name,
+        profile.civ,
+        profile.data_quality,
+        profile.feudal_time_sec,
+        profile.parse_source,
     )
     return profile

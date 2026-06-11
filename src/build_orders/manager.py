@@ -5,18 +5,17 @@ Acts as the single access point for persisting and retrieving BuildOrder objects
 """
 
 import json
-from datetime import datetime
 from typing import Optional
 
-from .models import BuildOrder, BuildStep
-from ..core.database import db_conn, now_iso, json_dumps, json_loads
 from ..core.config import BO_DIR
+from ..core.database import db_conn, json_dumps, json_loads, now_iso
 from ..core.logger import logger
-
+from .models import BuildOrder, BuildStep
 
 # ---------------------------------------------------------------------------
 # Read
 # ---------------------------------------------------------------------------
+
 
 def get_all_build_orders(
     *,
@@ -65,9 +64,7 @@ def get_all_build_orders(
 def get_build_order(bo_id: int) -> Optional[BuildOrder]:
     """Fetch a single build order by primary key. Returns None if not found."""
     with db_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM build_orders WHERE id = ?", (bo_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM build_orders WHERE id = ?", (bo_id,)).fetchone()
     if row is None:
         return None
     return _row_to_build_order(dict(row))
@@ -86,6 +83,7 @@ def get_build_order_by_external_id(external_id: str) -> Optional[BuildOrder]:
 # Write
 # ---------------------------------------------------------------------------
 
+
 def save_build_order(bo: BuildOrder) -> BuildOrder:
     """
     Insert or update a build order.
@@ -96,7 +94,7 @@ def save_build_order(bo: BuildOrder) -> BuildOrder:
     """
     ts = now_iso()
     steps_json = json_dumps([s.to_dict() for s in bo.steps])
-    tags_json  = json_dumps(bo.tags)
+    tags_json = json_dumps(bo.tags)
 
     with db_conn() as conn:
         if bo.id is None:
@@ -108,9 +106,19 @@ def save_build_order(bo: BuildOrder) -> BuildOrder:
                     source_url, steps_json, notes, is_favorite, created_at, updated_at)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    bo.external_id, bo.name, bo.civ, bo.strategy, bo.difficulty,
-                    tags_json, bo.author, bo.source_url, steps_json, bo.notes,
-                    int(bo.is_favorite), bo.created_at, bo.updated_at,
+                    bo.external_id,
+                    bo.name,
+                    bo.civ,
+                    bo.strategy,
+                    bo.difficulty,
+                    tags_json,
+                    bo.author,
+                    bo.source_url,
+                    steps_json,
+                    bo.notes,
+                    int(bo.is_favorite),
+                    bo.created_at,
+                    bo.updated_at,
                 ),
             )
             bo.id = cur.lastrowid
@@ -123,9 +131,19 @@ def save_build_order(bo: BuildOrder) -> BuildOrder:
                    author=?, source_url=?, steps_json=?, notes=?, is_favorite=?, updated_at=?
                    WHERE id=?""",
                 (
-                    bo.external_id, bo.name, bo.civ, bo.strategy, bo.difficulty,
-                    tags_json, bo.author, bo.source_url, steps_json, bo.notes,
-                    int(bo.is_favorite), bo.updated_at, bo.id,
+                    bo.external_id,
+                    bo.name,
+                    bo.civ,
+                    bo.strategy,
+                    bo.difficulty,
+                    tags_json,
+                    bo.author,
+                    bo.source_url,
+                    steps_json,
+                    bo.notes,
+                    int(bo.is_favorite),
+                    bo.updated_at,
+                    bo.id,
                 ),
             )
             logger.info("Updated build order id=%d '%s'", bo.id, bo.name)
@@ -145,9 +163,7 @@ def delete_build_order(bo_id: int) -> bool:
 def toggle_favorite(bo_id: int) -> bool:
     """Toggle the is_favorite flag. Returns the new state (True = favorited)."""
     with db_conn() as conn:
-        row = conn.execute(
-            "SELECT is_favorite FROM build_orders WHERE id = ?", (bo_id,)
-        ).fetchone()
+        row = conn.execute("SELECT is_favorite FROM build_orders WHERE id = ?", (bo_id,)).fetchone()
         if row is None:
             return False
         new_val = 0 if row["is_favorite"] else 1
@@ -161,6 +177,7 @@ def toggle_favorite(bo_id: int) -> bool:
 # ---------------------------------------------------------------------------
 # Import / Export helpers
 # ---------------------------------------------------------------------------
+
 
 def import_and_save(bo: BuildOrder) -> BuildOrder:
     """
@@ -182,6 +199,7 @@ def export_all_to_json(path=None) -> str:
     Returns the path written.
     """
     from pathlib import Path as _P
+
     bos = get_all_build_orders()
     data = [bo.to_dict() for bo in bos]
     out = _P(path) if path else (BO_DIR / f"export_{now_iso()[:10]}.json")
@@ -194,10 +212,11 @@ def export_all_to_json(path=None) -> str:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _row_to_build_order(row: dict) -> BuildOrder:
     """Convert a raw DB row dict to a BuildOrder with nested BuildStep list."""
     steps_raw = json_loads(row.get("steps_json", "[]"))
-    tags       = json_loads(row.get("tags", "[]"))
+    tags = json_loads(row.get("tags", "[]"))
     steps = [BuildStep.from_dict(s) for s in steps_raw]
     return BuildOrder(
         id=row["id"],
