@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from ..analytics.session import get_practice_streak
 from ..build_orders.models import BuildOrder
 from ..core.config import get_app_version, settings
+from ..core.global_hotkeys import GlobalHotkeyManager
 from ..core.logger import logger
 from .analytics_tab import AnalyticsTab
 from .dashboard_tab import DashboardTab
@@ -39,6 +40,7 @@ from .theme import (
     stylesheet_header_bar,
     stylesheet_overlay_toggle,
 )
+from .training_tab import TrainingTab
 
 
 class HeaderBar(QFrame):
@@ -135,12 +137,24 @@ class TrinkerMainWindow(QMainWindow):
         self._pending_bo: Optional[BuildOrder] = None
         self._shortcuts: list[QShortcut] = []
         self._toast_host: Optional[ToastHost] = None
+        self._global_hotkeys: Optional[GlobalHotkeyManager] = None
         self._setup_menu()
         self._setup_ui()
         self._setup_hotkeys()
         self._setup_background_services()
 
+        self._global_hotkeys = GlobalHotkeyManager(self)
+        self._global_hotkeys.set_callback("toggle_overlay", self._toggle_overlay)
+        self._global_hotkeys.set_callback("next_step", self._overlay_next_step)
+        self._global_hotkeys.set_callback("prev_step", self._overlay_prev_step)
+        self._global_hotkeys.set_callback("pause_timer", self._overlay_toggle_pause)
+
         logger.info("TRINKER main window initialized (v%s).", get_app_version())
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._global_hotkeys:
+            self._global_hotkeys.register()
 
     def _apply_theme(self, theme_name: Optional[str] = None) -> None:
         name = theme_name or settings.theme
@@ -150,6 +164,7 @@ class TrinkerMainWindow(QMainWindow):
         for tab in (
             getattr(self, "quick_start_tab", None),
             getattr(self, "dashboard_tab", None),
+            getattr(self, "training_tab", None),
             getattr(self, "library_tab", None),
             getattr(self, "analytics_tab", None),
             getattr(self, "settings_tab", None),
@@ -189,15 +204,18 @@ class TrinkerMainWindow(QMainWindow):
 
         act_start = QAction("Start Here", self)
         act_start.triggered.connect(lambda: self.tabs.setCurrentIndex(0))
-        act_library = QAction("Library", self)
-        act_library.triggered.connect(lambda: self.tabs.setCurrentIndex(2))
         act_dashboard = QAction("Dashboard", self)
         act_dashboard.triggered.connect(lambda: self.tabs.setCurrentIndex(1))
+        act_training = QAction("Training", self)
+        act_training.triggered.connect(lambda: self.tabs.setCurrentIndex(2))
+        act_library = QAction("Library", self)
+        act_library.triggered.connect(lambda: self.tabs.setCurrentIndex(3))
         act_analytics = QAction("Analytics", self)
-        act_analytics.triggered.connect(lambda: self.tabs.setCurrentIndex(3))
+        act_analytics.triggered.connect(lambda: self.tabs.setCurrentIndex(4))
         view_menu.addAction(act_start)
         view_menu.addSeparator()
         view_menu.addAction(act_dashboard)
+        view_menu.addAction(act_training)
         view_menu.addAction(act_library)
         view_menu.addAction(act_analytics)
 
@@ -228,12 +246,14 @@ class TrinkerMainWindow(QMainWindow):
 
         self.quick_start_tab = QuickStartTab()
         self.dashboard_tab = DashboardTab()
+        self.training_tab = TrainingTab()
         self.library_tab = LibraryTab()
         self.analytics_tab = AnalyticsTab()
         self.settings_tab = SettingsTab()
 
         self.tabs.addTab(self.quick_start_tab, "▶  Start Here")
         self.tabs.addTab(self.dashboard_tab, "📈  Dashboard")
+        self.tabs.addTab(self.training_tab, "🎯  Training")
         self.tabs.addTab(self.library_tab, "📚  Library")
         self.tabs.addTab(self.analytics_tab, "📊  Analytics")
         self.tabs.addTab(self.settings_tab, "⚙  Settings")
@@ -250,6 +270,7 @@ class TrinkerMainWindow(QMainWindow):
         self.quick_start_tab.play_requested.connect(self._on_quick_start_play)
         self.quick_start_tab.import_replay_requested.connect(self._on_quick_start_import)
         self.quick_start_tab.bulk_import_done.connect(self.analytics_tab.refresh)
+        self.training_tab.play_drill_requested.connect(lambda: self.tabs.setCurrentIndex(0))
         self.library_tab.build_order_selected.connect(self._on_bo_selected)
         self.settings_tab.settings_changed.connect(self._on_settings_changed)
         self.settings_tab.theme_preview_changed.connect(self._preview_theme)
@@ -427,8 +448,10 @@ class TrinkerMainWindow(QMainWindow):
             self.dashboard_tab.refresh()
             self.header.refresh_streak()
         elif index == 2:
-            self.library_tab.refresh()
+            self.training_tab.refresh()
         elif index == 3:
+            self.library_tab.refresh()
+        elif index == 4:
             self.analytics_tab.refresh()
 
     def _on_settings_changed(self) -> None:
@@ -436,6 +459,8 @@ class TrinkerMainWindow(QMainWindow):
         if self._overlay:
             self._overlay.set_opacity(settings.overlay_opacity)
         self._reload_hotkeys()
+        if self._global_hotkeys:
+            self._global_hotkeys.register()
         if settings.auto_detect_sessions:
             if not self._auto_import_timer.isActive():
                 self._auto_import_timer.start()
@@ -536,6 +561,8 @@ class TrinkerMainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", f"Could not open log file:\n{exc}")
 
     def closeEvent(self, event) -> None:
+        if self._global_hotkeys:
+            self._global_hotkeys.unregister()
         settings.save()
         if self._overlay:
             self._overlay.close()

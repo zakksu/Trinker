@@ -74,6 +74,14 @@ def import_replay_profile(
     result.civ = civ_label
     result.message = f"Game saved — {civ_label} ({profile.data_quality})"
     logger.info("ReplayService: %s", result.message)
+
+    try:
+        from ..plugins.registry import emit
+
+        emit("replay_imported", profile=profile, session_id=session.id, result=result)
+    except Exception:
+        pass
+
     return result
 
 

@@ -33,6 +33,7 @@ from ..analytics.session import (
 )
 from ..core.config import settings
 from ..integrations.aoe2gg import get_stored_matches, import_recent_matches, profile_url_for
+from ..training.drill_engine import pin_drill, suggest_drill
 from .medieval.animations import stagger_fade_in
 from .medieval.icons import Icon
 from .medieval.palette import get_palette
@@ -176,6 +177,18 @@ class DashboardTab(QWidget):
         )
         self.panel_coach.add_widget(self.lbl_coach)
         layout.addWidget(self.panel_coach)
+
+        self.panel_drill = MedievalPanel("Next Drill", Icon.OVERLAY)
+        self.lbl_drill = QLabel("—")
+        self.lbl_drill.setWordWrap(True)
+        self.panel_drill.add_widget(self.lbl_drill)
+        drill_row = QHBoxLayout()
+        self.btn_pin_drill = QPushButton(f"{Icon.OVERLAY} Pin Drill")
+        self.btn_pin_drill.clicked.connect(self._pin_next_drill)
+        drill_row.addWidget(self.btn_pin_drill)
+        drill_row.addStretch()
+        self.panel_drill.add_layout(drill_row)
+        layout.addWidget(self.panel_drill)
 
         self.panel_chat = MedievalPanel("Ask Coach", Icon.ASK)
         self.chat_history = QTextEdit()
@@ -379,6 +392,24 @@ class DashboardTab(QWidget):
                 accent=p.ink_muted,
             )
 
+    def _render_drill(self, stats: dict) -> None:
+        drill = suggest_drill(
+            feudal_sec=stats.get("avg_feudal_sec"),
+            overlay_alert=settings.overlay_coach_alert,
+            win_rate=float(stats.get("win_rate") or 0),
+        )
+        self.lbl_drill.setText(f"{Icon.COACH} {drill.title}\n{drill.instructions}")
+
+    def _pin_next_drill(self) -> None:
+        stats = get_summary_stats()
+        drill = suggest_drill(
+            feudal_sec=stats.get("avg_feudal_sec"),
+            overlay_alert=settings.overlay_coach_alert,
+            win_rate=float(stats.get("win_rate") or 0),
+        )
+        pin_drill(drill)
+        self.lbl_drill.setText(f"{Icon.OVERLAY} Pinned: {drill.title}")
+
     def refresh(self) -> None:
         stats = get_summary_stats()
         self.card_sessions.set_value(str(stats.get("total_sessions", 0)))
@@ -415,6 +446,8 @@ class DashboardTab(QWidget):
             )
 
         self._render_compare(feudal_sec, castle_sec, imperial_sec)
+
+        self._render_drill(stats)
 
         if settings.overlay_coach_alert:
             self.lbl_coach.setText(f"{Icon.COACH}  {settings.overlay_coach_alert}")

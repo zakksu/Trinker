@@ -106,6 +106,15 @@ def run_postgame_coach(
     )
     system_prompt, user_prompt = PromptBuilder.postgame_coaching(summary)
 
+    if settings.rag_enabled:
+        from .rag import retrieve_context
+
+        rag = retrieve_context(
+            f"{civ} {strategy} {build_order_name} feudal castle eco",
+        )
+        if rag:
+            user_prompt = f"{user_prompt}\n\n{rag}"
+
     if not _is_ollama_available():
         offline = _offline_coaching_tips(
             analysis.feudal_time_sec,

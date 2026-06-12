@@ -2,7 +2,7 @@
   <img src="assets/trinker_icon.png" alt="TRINKER logo" width="160">
 </p>
 
-<h1 align="center">Trinker — Your Personal Age of Empires 2 Build Order Coach & Replay Analyst</h1>
+<h1 align="center">Trinker 3.0 — Your Personal Age of Empires 2 Build Order Coach & Replay Analyst</h1>
 
 <p align="center">
   <strong>Stop guessing your feudal time. Start training with purpose.</strong><br>
@@ -35,6 +35,10 @@ Whether you are learning your first Meta Knight rush or tightening a 22-pop arch
 | 📊 **Dashboard & analytics** | Session history, timing trends, win-rate views, and compare-to-build diffs |
 | 🎬 **Replay analysis** | Import `.mgz` replays — feudal/castle times, economy snapshots, post-game summaries |
 | 🤖 **AI Coach (optional)** | Local Ollama integration — ask questions, get tips, no cloud required |
+| 📖 **RAG knowledge base** | Built-in AoE2 guides injected into coach prompts (feudal timing, economy, scout rush) |
+| 🎯 **Training Arena** | Pin drills, get suggestions from your stats, practice with focused goals |
+| ⌨️ **Global hotkeys (Windows)** | Toggle overlay and step through builds while AoE2 has focus |
+| 🃏 **Library card view** | Browse build orders as cards or table — pick what fits your workflow |
 | 🌐 **Online profile hook** | Pull recent ladder matches via aoe2.gg integration (when APIs are available) |
 | 🔔 **Smart notifications** | Milestone toasts, streak tracking, and gentle nudges when you drift off plan |
 | ⚙️ **Offline-first** | SQLite storage under your user profile; your data stays on your machine |
@@ -133,8 +137,12 @@ python main.py
 ### Optional: AI Coach
 
 1. Install [Ollama](https://ollama.ai).
-2. Pull a model, e.g. `ollama pull llama3.2`.
-3. In Trinker → **Settings → AI Coaching** → enable and **Test Connection**.
+2. Run the setup helper (pulls the recommended model):
+   ```bat
+   python scripts/setup_ollama.py
+   ```
+   Or manually: `ollama pull llama3.2`
+3. In Trinker → **Settings → AI Coaching** → enable, turn on **RAG knowledge base** if you want guide snippets in prompts, and **Test Connection**.
 
 If Ollama is offline, Trinker falls back to static tips — no crash, no cloud.
 
@@ -151,10 +159,11 @@ Output: `dist\TRINKER.exe` — built with PyInstaller (`trinker.spec`).
 ## Usage
 
 1. **Start Here** — Pick a build order and launch the overlay.
-2. **Play** — Follow steps; use hotkeys shown in the overlay footer.
-3. **Import replay** — After the match, import your `.mgz` from the AoE2 DE savegame folder.
-4. **Dashboard** — Review timings, compare execution vs. the planned build, ask the AI Coach.
-5. **Library** — Edit, duplicate, or import community build orders (`.json`).
+2. **Training** — Pin a drill or accept a suggested focus for your next session.
+3. **Play** — Follow steps; use hotkeys shown in the overlay footer (global hotkeys on Windows when enabled in Settings).
+4. **Import replay** — After the match, import your `.mgz` from the AoE2 DE savegame folder.
+5. **Dashboard** — Review timings, compare execution vs. the planned build, ask the AI Coach.
+6. **Library** — Edit, duplicate, or import community build orders (`.json`); switch between table and card views.
 
 **Default hotkeys** (customizable in Settings):
 
@@ -163,6 +172,8 @@ Output: `dist\TRINKER.exe` — built with PyInstaller (`trinker.spec`).
 | Toggle overlay | `Ctrl+Shift+O` |
 | Next step | `Ctrl+Shift+N` |
 | Previous step | `Ctrl+Shift+P` |
+
+On **Windows**, enable **Global hotkeys** in Settings to use these while AoE2 has focus. On macOS/Linux, Trinker must be focused (or use the in-app shortcuts).
 
 ---
 
@@ -173,9 +184,9 @@ Output: `dist\TRINKER.exe` — built with PyInstaller (`trinker.spec`).
 | **v2.0** ✅ | Compare-to-build, Ask Coach chat, aoe2.gg hook, CI pipeline |
 | **v2.1** ✅ | Medieval dark UI, dashboard cards, overlay polish |
 | **v2.2** ✅ | Win-rate heatmaps, streak badges, cross-platform CI + platformdirs |
-| **v2.3** 🚧 | Expanded pytest-qt suite, replay corpus tests, E2E CI flows |
-| **v2.4** | Ollama auto-setup + RAG, replay corpus downloads |
-| **Future** | Civ-themed skins, build preview grid, practice simulation stub, plugin hooks |
+| **v2.3** ✅ | Expanded pytest-qt suite, replay corpus tests, E2E CI flows |
+| **v3.0** ✅ | Training Arena, RAG coach, global hotkeys, library cards, plugin hooks |
+| **Future** | Civ-themed skins, replay corpus downloads, signed releases, simulation engine |
 
 Track progress in [GitHub Issues](https://github.com/zakksu/Trinker/issues) and [Releases](https://github.com/zakksu/Trinker/releases).
 

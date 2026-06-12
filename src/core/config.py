@@ -166,6 +166,10 @@ class AppSettings:
     ai_coach_enabled: bool = True
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
+    recommended_ollama_model: str = "llama3.2"
+    rag_enabled: bool = True
+    global_hotkeys_enabled: bool = True
+    active_drill_id: str = ""
     telemetry_opt_in: bool = False
     auto_prompt_new_replay: bool = True  # ask to import after a new game
     last_seen_replay_mtime: float = 0.0  # tracks newest replay we've seen

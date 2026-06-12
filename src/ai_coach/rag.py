@@ -1,0 +1,83 @@
+"""
+TRINKER 3.0 - Local RAG knowledge base (keyword retrieval, no embeddings).
+Loads markdown guides from data/knowledge/ and repo bundle.
+"""
+
+from __future__ import annotations
+
+import re
+from functools import lru_cache
+from pathlib import Path
+
+from ..core.config import settings
+from ..core.logger import logger
+
+_ROOT = Path(__file__).resolve().parent.parent.parent
+_KNOWLEDGE_DIRS = (
+    _ROOT / "data" / "knowledge",
+    Path(__file__).resolve().parent / "knowledge",
+)
+
+
+def _knowledge_dirs() -> list[Path]:
+    dirs = [d for d in _KNOWLEDGE_DIRS if d.is_dir()]
+    return dirs or [_ROOT / "data" / "knowledge"]
+
+
+def _tokenize(text: str) -> set[str]:
+    return {t.lower() for t in re.findall(r"[a-z0-9]+", text) if len(t) > 2}
+
+
+@lru_cache(maxsize=1)
+def _load_chunks() -> list[tuple[str, str, set[str]]]:
+    """Return (source, paragraph, tokens) for all knowledge paragraphs."""
+    chunks: list[tuple[str, str, set[str]]] = []
+    for base in _knowledge_dirs():
+        if not base.exists():
+            continue
+        for path in sorted(base.glob("*.md")):
+            try:
+                body = path.read_text(encoding="utf-8")
+            except Exception as exc:
+                logger.debug("Skip knowledge file %s: %s", path.name, exc)
+                continue
+            source = path.stem.replace("_", " ")
+            for para in re.split(r"\n\s*\n", body):
+                para = para.strip()
+                if len(para) < 40:
+                    continue
+                chunks.append((source, para, _tokenize(para)))
+    return chunks
+
+
+def retrieve_context(query: str, *, limit: int = 3) -> str:
+    """
+    Return top matching knowledge snippets for a coaching query.
+    Empty string if RAG disabled or no matches.
+    """
+    if not getattr(settings, "rag_enabled", True):
+        return ""
+
+    q_tokens = _tokenize(query)
+    if not q_tokens:
+        return ""
+
+    scored: list[tuple[int, str, str]] = []
+    for source, para, tokens in _load_chunks():
+        overlap = len(q_tokens & tokens)
+        if overlap == 0:
+            continue
+        scored.append((overlap, source, para))
+
+    if not scored:
+        return ""
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    lines = ["=== Local AoE2 Guides (TRINKER knowledge base) ==="]
+    for _, source, para in scored[:limit]:
+        lines.append(f"[{source}] {para}")
+    return "\n".join(lines)
+
+
+def clear_cache() -> None:
+    _load_chunks.cache_clear()

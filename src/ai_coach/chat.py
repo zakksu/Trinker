@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..core.config import settings
 from ..core.database import db_conn, now_iso
 from ..core.logger import logger
 from .coach import _is_ollama_available, _offline_coaching_tips, _query_ollama_chat
@@ -68,6 +69,15 @@ def ask_coach(
 
     save_coach_message(thread_key, "user", question)
     history = [(m.role, m.content) for m in get_coach_messages(thread_key)]
+
+    if settings.rag_enabled:
+        from .rag import retrieve_context
+
+        rag = retrieve_context(f"{question} {summary.civ} {summary.build_name}")
+        if rag:
+            summary = ReplaySummary(
+                **{**summary.__dict__, "comparison": (summary.comparison or "") + "\n\n" + rag}
+            )
 
     if not _is_ollama_available():
         reply = _offline_coaching_tips(

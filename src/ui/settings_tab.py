@@ -162,8 +162,12 @@ class SettingsTab(QWidget):
         hotkey_form.addRow("Toggle Overlay", self.ed_hotkey_overlay)
         hotkey_form.addRow("Pause/Resume Overlay Timer", self.ed_hotkey_session)
 
+        self.chk_global_hotkeys = QCheckBox("Global hotkeys while playing (Windows)")
+        hotkey_form.addRow("", self.chk_global_hotkeys)
+
         hotkey_hint = QLabel(
-            "Click a field, then press the key combination. Hotkeys work when TRINKER is focused."
+            "Click a field, then press the key combination. "
+            "Global hotkeys (Windows) work while AoE2 is focused."
         )
         hotkey_hint.setStyleSheet("color: #7f8c8d; font-size: 10px;")
         hotkey_hint.setWordWrap(True)
@@ -178,6 +182,10 @@ class SettingsTab(QWidget):
         self.chk_ai_enabled = QCheckBox("Enable AI Coach (auto-enabled when Ollama is running)")
         ai_form.addRow("", self.chk_ai_enabled)
 
+        self.chk_rag = QCheckBox("Use local AoE2 knowledge base (RAG)")
+        self.chk_rag.setToolTip("Injects guides from data/knowledge/ into coach prompts")
+        ai_form.addRow("", self.chk_rag)
+
         self.ed_ollama_url = QLineEdit()
         self.ed_ollama_url.setPlaceholderText("http://localhost:11434")
         ai_form.addRow("Ollama URL", self.ed_ollama_url)
@@ -190,9 +198,13 @@ class SettingsTab(QWidget):
         btn_test_ai.clicked.connect(self._test_ollama)
         ai_form.addRow("", btn_test_ai)
 
+        btn_setup = QPushButton("Run Ollama Setup Script")
+        btn_setup.clicked.connect(self._run_ollama_setup)
+        ai_form.addRow("", btn_setup)
+
         ai_hint = QLabel(
-            "Download Ollama from https://ollama.ai and run: ollama pull llama3\n"
-            "The AI coach analyzes your sessions and suggests improvements."
+            "Download Ollama from https://ollama.ai — or use Setup Script to pull llama3.2.\n"
+            "RAG adds local AoE2 guides to coach prompts automatically."
         )
         ai_hint.setStyleSheet("color: #7f8c8d; font-size: 10px;")
         ai_hint.setWordWrap(True)
@@ -277,6 +289,8 @@ class SettingsTab(QWidget):
         self.ed_hotkey_overlay.set_hotkey(settings.hotkey_toggle_overlay)
         self.ed_hotkey_session.set_hotkey(settings.hotkey_start_session)
         self.chk_ai_enabled.setChecked(settings.ai_coach_enabled)
+        self.chk_rag.setChecked(settings.rag_enabled)
+        self.chk_global_hotkeys.setChecked(settings.global_hotkeys_enabled)
         self.ed_ollama_url.setText(settings.ollama_url)
         self.ed_ollama_model.setText(settings.ollama_model)
         self.chk_telemetry.setChecked(settings.telemetry_opt_in)
@@ -317,6 +331,8 @@ class SettingsTab(QWidget):
         settings.hotkey_toggle_overlay = normalize_key_sequence(hotkeys["toggle_overlay"])
         settings.hotkey_start_session = normalize_key_sequence(hotkeys["pause_timer"])
         settings.ai_coach_enabled = self.chk_ai_enabled.isChecked()
+        settings.rag_enabled = self.chk_rag.isChecked()
+        settings.global_hotkeys_enabled = self.chk_global_hotkeys.isChecked()
         settings.ollama_url = self.ed_ollama_url.text().strip() or "http://localhost:11434"
         settings.ollama_model = self.ed_ollama_model.text().strip() or "llama3"
         settings.telemetry_opt_in = self.chk_telemetry.isChecked()
@@ -365,6 +381,22 @@ class SettingsTab(QWidget):
                 "Cannot connect to Ollama",
                 f"{exc}\n\nMake sure Ollama is running: https://ollama.ai",
             )
+
+
+    def _run_ollama_setup(self) -> None:
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        script = Path(__file__).resolve().parent.parent.parent / "scripts" / "setup_ollama.py"
+        if not script.exists():
+            QMessageBox.warning(self, "Setup", f"Script not found:\n{script}")
+            return
+        try:
+            subprocess.Popen([sys.executable, str(script)], cwd=str(script.parent.parent))
+            show_toast("Ollama setup started in a new console window.", "info")
+        except Exception as exc:
+            QMessageBox.warning(self, "Setup", str(exc))
 
 
 def _open_dir(path: Path) -> None:

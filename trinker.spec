@@ -11,6 +11,7 @@ a = Analysis(
     datas=[
         ('src', 'src'),
         ('assets', 'assets'),
+        ('data', 'data'),
         ('VERSION', '.'),
     ],
     hiddenimports=[

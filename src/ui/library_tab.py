@@ -13,12 +13,15 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -88,6 +91,7 @@ CIVS = [
 ]
 
 from .build_order_editor import BuildOrderEditorDialog as BuildOrderDialog
+from .library_cards import BuildOrderCard
 from .notifications import show_toast
 from .theme import apply_tab_with_table
 
@@ -214,15 +218,28 @@ class LibraryTab(QWidget):
         btn_new.clicked.connect(self._on_new)
         btn_export = QPushButton("⬇ Export All")
         btn_export.clicked.connect(self._on_export)
+        self.btn_view_table = QPushButton("☰ Table")
+        self.btn_view_table.setCheckable(True)
+        self.btn_view_table.setChecked(True)
+        self.btn_view_cards = QPushButton("▦ Cards")
+        self.btn_view_cards.setCheckable(True)
+        self.btn_view_table.clicked.connect(lambda: self._set_view(0))
+        self.btn_view_cards.clicked.connect(lambda: self._set_view(1))
 
         for w in [self.ed_search, self.cb_civ_filter, self.chk_favs]:
             toolbar.addWidget(w)
         toolbar.addStretch()
+        toolbar.addWidget(self.btn_view_table)
+        toolbar.addWidget(self.btn_view_cards)
         for btn in [btn_url, btn_file, btn_new, btn_export]:
             toolbar.addWidget(btn)
         root.addLayout(toolbar)
 
-        # ── Table ─────────────────────────────────────────────────────────
+        self._stack = QStackedWidget()
+        # ── Table view ────────────────────────────────────────────────────
+        table_page = QWidget()
+        table_layout = QVBoxLayout(table_page)
+        table_layout.setContentsMargins(0, 0, 0, 0)
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             ["⭐", "Name", "Civ", "Strategy", "Steps", "Difficulty", "Updated"]
@@ -236,7 +253,20 @@ class LibraryTab(QWidget):
         self.table.doubleClicked.connect(self._on_row_double_click)
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("QTableWidget::item:alternate { background: #1a1a20; }")
-        root.addWidget(self.table)
+        table_layout.addWidget(self.table)
+        self._stack.addWidget(table_page)
+
+        # ── Card grid view ────────────────────────────────────────────────
+        card_scroll = QScrollArea()
+        card_scroll.setWidgetResizable(True)
+        card_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        card_host = QWidget()
+        self._card_grid = QGridLayout(card_host)
+        self._card_grid.setSpacing(12)
+        card_scroll.setWidget(card_host)
+        self._stack.addWidget(card_scroll)
+
+        root.addWidget(self._stack)
 
         # ── Action buttons ────────────────────────────────────────────────
         action_row = QHBoxLayout()
@@ -266,8 +296,14 @@ class LibraryTab(QWidget):
         root.addLayout(action_row)
 
         self._all_build_orders: list[BuildOrder] = []
+        self._filtered: list[BuildOrder] = []
         self._thread = None
         self._worker = None
+
+    def _set_view(self, index: int) -> None:
+        self._stack.setCurrentIndex(index)
+        self.btn_view_table.setChecked(index == 0)
+        self.btn_view_cards.setChecked(index == 1)
 
     # ── Data ──────────────────────────────────────────────────────────────
 
@@ -293,7 +329,29 @@ class LibraryTab(QWidget):
             and (civ == "All Civs" or bo.civ in (civ, "Any"))
             and (not favs or bo.is_favorite)
         ]
+        self._filtered = filtered
         self._populate_table(filtered)
+        self._populate_cards(filtered)
+
+    def _populate_cards(self, build_orders: list[BuildOrder]) -> None:
+        while self._card_grid.count():
+            item = self._card_grid.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        cols = 3
+        for i, bo in enumerate(build_orders):
+            card = BuildOrderCard(bo)
+            card.clicked.connect(self._on_card_clicked)
+            card.load_requested.connect(self.build_order_selected.emit)
+            self._card_grid.addWidget(card, i // cols, i % cols)
+
+    def _on_card_clicked(self, bo: BuildOrder) -> None:
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if item and item.data(Qt.ItemDataRole.UserRole) == bo.id:
+                self.table.selectRow(row)
+                break
 
     def _populate_table(self, build_orders: list[BuildOrder]) -> None:
         self.table.setRowCount(0)
