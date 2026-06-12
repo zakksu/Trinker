@@ -1,0 +1,59 @@
+---
+description: User-delegated agent autonomy for git, build, test, and release
+alwaysApply: true
+---
+
+# TRINKER agent autonomy (user delegated)
+
+The user delegated full devops to the agent. **Do not ask** for permission to commit, push, test, or release unless blocked by tooling.
+
+## You may always (without asking)
+
+- Read/write any project file
+- Run `python -m pytest tests/ -q`
+- Run `python scripts/seed_sandbox.py` with `TRINKER_SANDBOX=1`
+- `git add`, `git commit`, `git push origin main`
+- `python scripts/release.py --yes` (skip popup — user opted in)
+- `python scripts/agent_ship.py "message"` for test+commit+push+release in one step
+- `python scripts/build_hera_coach.py --corpus-only`
+- `python scripts/find_replays.py`
+
+## User only clicks
+
+- **`LAUNCHER.bat`** — normal daily play (real data, updates)
+- **`SANDBOX.bat`** — only when user wants to visually check sandbox UI (optional)
+- **`RELEASE.bat`** — user may still use this manually; agent uses `--yes` instead
+
+## When to ask the user
+
+- Destructive git (`reset --hard`, force push)
+- Changing git config
+- UI verification they must see in-game ("does overlay look right?")
+- Downloading large external datasets they must provide
+
+## Release workflow (agent)
+
+```bash
+python scripts/agent_ship.py "Concise commit message why."
+```
+
+Or stepwise: pytest → commit → push → `python scripts/release.py --yes`
+
+## Sandbox vs production
+
+| Mode | Env | Data |
+|------|-----|------|
+| Production | (default) | `%LOCALAPPDATA%\TRINKER\` |
+| Sandbox | `TRINKER_SANDBOX=1` | `%LOCALAPPDATA%\TRINKER_SANDBOX\` |
+
+Use sandbox for fake sessions, Hera corpus tests, and UI experiments without touching 279 real replays.
+
+## Fake training environment
+
+Yes — use **`SANDBOX.bat`** + `scripts/seed_sandbox.py`:
+- Fake sessions for charts/KPIs
+- Sample Hera corpus for coach/RAG
+- Synthetic `.aoe2record` files
+- Training Arena simulation (offline mental timing) for no-game practice
+
+Future: scored simulation scenarios, mock ranked import, agent-only headless E2E.

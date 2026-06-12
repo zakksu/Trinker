@@ -5,10 +5,22 @@ Uses platformdirs for cross-platform data directory resolution.
 """
 
 import json
+import os
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Sandbox mode — isolated data dir for agent/dev (set TRINKER_SANDBOX=1)
+# ---------------------------------------------------------------------------
+
+
+def is_sandbox_mode() -> bool:
+    return os.environ.get("TRINKER_SANDBOX", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+APP_NAME = "TRINKER_SANDBOX" if is_sandbox_mode() else "TRINKER"
 
 # ---------------------------------------------------------------------------
 # Platform-aware application directories
@@ -63,7 +75,7 @@ def _resolve_app_dirs(app_name: str = "TRINKER") -> _AppDirs:
         return _AppDirs(app_name)
 
 
-APP_DIRS = _resolve_app_dirs("TRINKER")
+APP_DIRS = _resolve_app_dirs(APP_NAME)
 
 # ---------------------------------------------------------------------------
 # Key file paths

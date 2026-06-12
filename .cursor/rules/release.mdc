@@ -1,10 +1,25 @@
+---
+description: Release workflow — agent uses --yes per user delegation
+alwaysApply: true
+---
+
 # TRINKER release policy
 
-When completing a version bump or major feature milestone:
+User delegated releases to the agent (see `agent-autonomy.mdc`).
 
-1. Commit all changes with VERSION updated.
-2. Run `python scripts/release.py` (shows a **Windows popup** for user confirmation before push/tag/GitHub Release).
-3. Do **not** use `--yes` unless the user explicitly asked to skip confirmation.
-4. Tell the user: "Release popup should appear — click **Yes** to publish."
+## Agent release
 
-User entry point is always **LAUNCHER.bat** (one click → latest version).
+1. Bump `VERSION` when shipping a milestone.
+2. Run tests: `python -m pytest tests/ -q`
+3. Commit with clear message.
+4. Ship: `python scripts/agent_ship.py "message"` **or** `python scripts/release.py --yes`
+
+Do **not** use confirmation popup when acting as agent — user opted out.
+
+## User manual release
+
+User may still double-click **`RELEASE.bat`** (shows popup).
+
+## Entry point
+
+Daily play: **`LAUNCHER.bat`** only.

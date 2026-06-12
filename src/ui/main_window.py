@@ -6,7 +6,7 @@ Wires all tabs and the overlay together with signals.
 
 from typing import Optional
 
-from PySide6.QtCore import QThread, QTimer, Signal
+from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from ..analytics.session import get_practice_streak
 from ..build_orders.models import BuildOrder
-from ..core.config import get_app_version, settings
+from ..core.config import get_app_version, is_sandbox_mode, settings
 from ..core.global_hotkeys import GlobalHotkeyManager
 from ..core.logger import logger
 from .analytics_tab import AnalyticsTab
@@ -165,6 +165,12 @@ class TrinkerMainWindow(QMainWindow):
         apply_main_window(self)
         if hasattr(self, "header"):
             self.header.apply_theme(name)
+        if getattr(self, "_sandbox_banner", None):
+            t = get_tokens(name)
+            self._sandbox_banner.setStyleSheet(
+                f"background: {t.warning}; color: {t.text}; font-size: 11px; "
+                f"font-weight: bold; padding: 6px 12px; border-bottom: 1px solid {t.border};"
+            )
         for tab in (
             getattr(self, "quick_start_tab", None),
             getattr(self, "dashboard_tab", None),
@@ -245,6 +251,17 @@ class TrinkerMainWindow(QMainWindow):
         self.header = HeaderBar()
         self.header.overlay_toggled.connect(self._on_overlay_toggled)
         root.addWidget(self.header)
+
+        if is_sandbox_mode():
+            self._sandbox_banner = QLabel(
+                "SANDBOX — fake training data only. Your real games are not used."
+            )
+            self._sandbox_banner.setObjectName("sandboxBanner")
+            self._sandbox_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            root.addWidget(self._sandbox_banner)
+            self.setWindowTitle("TRINKER [SANDBOX] — AoE2 Training Companion")
+        else:
+            self._sandbox_banner = None
 
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
