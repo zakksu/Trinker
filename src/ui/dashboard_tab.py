@@ -43,6 +43,7 @@ from ..analytics.session import (
     get_summary_stats,
     get_training_badges,
 )
+from ..analytics.training_stats import format_win_rate_label, get_platform_stats
 from ..analytics.replay_store import (
     get_latest_replay_analysis,
     get_replay_analyses,
@@ -396,14 +397,16 @@ class DashboardTab(QWidget):
         pix_a = render_accuracy_trend(acc_trend) if acc_trend else None
         breakdown: dict[str, int] = {}
         for key, label in (
-            ("wins", "win"),
-            ("losses", "loss"),
-            ("draws", "draw"),
-            ("practice_sessions", "practice"),
+            ("ranked_wins", "win"),
+            ("ranked_losses", "loss"),
+            ("ranked_draws", "draw"),
         ):
             val = stats.get(key) or 0
             if val:
                 breakdown[label] = int(val)
+        practice = int(stats.get("all_games") or 0) - sum(breakdown.values())
+        if practice > 0:
+            breakdown["practice"] = practice
         pix_r = render_win_rate_bar(breakdown) if breakdown else None
 
         def _set(lbl: QLabel, pix, empty: str) -> None:
@@ -467,13 +470,17 @@ class DashboardTab(QWidget):
             if w:
                 w.deleteLater()
         badges = get_training_badges()
-        if not badges:
+        from ..training.drill_progress import get_completed_drill_badges
+
+        drill_badges = get_completed_drill_badges()
+        all_badges = [f"🏅 {b}" for b in badges] + drill_badges
+        if not all_badges:
             self._badges_row.addWidget(
                 BadgeChip("Play your first game to earn badges")
             )
         else:
-            for name in badges:
-                self._badges_row.addWidget(BadgeChip(f"🏅 {name}"))
+            for name in all_badges:
+                self._badges_row.addWidget(BadgeChip(name))
         self._badges_row.addStretch()
 
     def _load_chat_history(self) -> None:
@@ -590,10 +597,13 @@ class DashboardTab(QWidget):
         from ..core.config import settings as cfg
         from ..training.drill_progress import format_progress_label, get_drill
 
+        wr = float(
+            stats.get("ranked_win_rate") or stats.get("replay_win_rate") or stats.get("win_rate") or 0
+        )
         drill = suggest_drill(
             feudal_sec=stats.get("avg_feudal_sec"),
             overlay_alert=cfg.overlay_coach_alert,
-            win_rate=float(stats.get("win_rate") or 0),
+            win_rate=wr,
         )
         progress = ""
         if cfg.active_drill_id:
@@ -607,23 +617,24 @@ class DashboardTab(QWidget):
                 )
 
     def _pin_next_drill(self) -> None:
-        stats = get_summary_stats()
+        stats = get_platform_stats()
+        wr = float(
+            stats.get("ranked_win_rate") or stats.get("replay_win_rate") or stats.get("win_rate") or 0
+        )
         drill = suggest_drill(
             feudal_sec=stats.get("avg_feudal_sec"),
             overlay_alert=settings.overlay_coach_alert,
-            win_rate=float(stats.get("win_rate") or 0),
+            win_rate=wr,
         )
         pin_drill(drill)
         self.lbl_drill.setText(f"{Icon.OVERLAY} Pinned: {drill.title}")
 
     def refresh(self) -> None:
-        stats = get_summary_stats()
-        self.card_sessions.set_value(str(stats.get("total_sessions", 0)))
+        stats = get_platform_stats()
+        self.card_sessions.set_value(str(stats.get("all_games") or stats.get("total_sessions", 0)))
         feudal = stats.get("avg_feudal_sec")
         self.card_feudal.set_value(_fmt_sec(feudal) if feudal else "—")
-        self.card_winrate.set_value(
-            f"{stats['win_rate']:.1f}%" if stats.get("win_rate") is not None else "—"
-        )
+        self.card_winrate.set_value(format_win_rate_label(stats))
         acc = stats.get("avg_accuracy")
         self.card_accuracy.set_value(f"{acc:.1f}%" if acc is not None else "—")
         streak = get_practice_streak()

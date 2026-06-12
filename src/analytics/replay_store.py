@@ -41,6 +41,7 @@ def save_replay_analysis(
         "duration_sec": profile.duration_sec,
         "final_pop": profile.final_pop,
         "eapm": profile.eapm,
+        "result": profile.result,
         "labels": profile.labels,
         "parse_source": profile.parse_source,
         "validation_issues": profile.validation_issues,

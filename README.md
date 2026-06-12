@@ -2,7 +2,7 @@
   <img src="assets/trinker_icon.png" alt="TRINKER logo" width="160">
 </p>
 
-<h1 align="center">Trinker 3.0 — Your Personal Age of Empires 2 Build Order Coach & Replay Analyst</h1>
+<h1 align="center">Trinker 3.2 — Your Personal Age of Empires 2 Build Order Coach & Replay Analyst</h1>
 
 <p align="center">
   <strong>Stop guessing your feudal time. Start training with purpose.</strong><br>
@@ -32,11 +32,12 @@ Whether you are learning your first Meta Knight rush or tightening a 22-pop arch
 |---|---|
 | 📋 **Build order overlay** | Step-by-step checklist on top of your game — hotkeys, timers, and progress at a glance |
 | 📚 **Build library** | Starter orders for common openings; import, edit, and organize your own |
-| 📊 **Dashboard & analytics** | Session history, timing trends, win-rate views, and compare-to-build diffs |
+| 📊 **Performance Hub** | Editable KPIs, trend charts, historical patterns, compare-to-build — all on Dashboard |
+| 📊 **Dashboard & analytics** | Session history, timing trends, honest win-rate (ranked vs practice), compare diffs |
 | 🎬 **Replay analysis** | Import `.mgz` replays — feudal/castle times, economy snapshots, post-game summaries |
 | 🤖 **AI Coach (optional)** | Local Ollama integration — ask questions, get tips, no cloud required |
 | 📖 **RAG knowledge base** | Built-in AoE2 guides injected into coach prompts (feudal timing, economy, scout rush) |
-| 🎯 **Training Arena** | Pin drills, get suggestions from your stats, practice with focused goals |
+| 🎯 **Training Arena** | Adaptive drills from postgame coach, pin + 3/3 progress, completion badges |
 | ⌨️ **Global hotkeys (Windows)** | Toggle overlay and step through builds while AoE2 has focus |
 | 🃏 **Library card view** | Browse build orders as cards or table — pick what fits your workflow |
 | 🌐 **Online profile hook** | Pull recent ladder matches via aoe2.gg integration (when APIs are available) |
@@ -48,7 +49,7 @@ Whether you are learning your first Meta Knight rush or tightening a 22-pop arch
 
 ## Screenshots
 
-> **Coming soon** — GIFs and screenshots will live here after the v2.1 UI polish lands.
+> **Screenshots** — capture your Performance Hub from v3.2+ (see guide below). Full vision: [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md).
 
 | Dashboard | Overlay | Replay analysis |
 |:---:|:---:|:---:|

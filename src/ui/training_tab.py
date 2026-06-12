@@ -17,9 +17,10 @@ from PySide6.QtWidgets import (
 )
 
 from ..analytics.session import get_summary_stats
+from ..analytics.training_stats import get_platform_stats
 from ..core.config import settings
-from ..training.drill_engine import list_drills, pin_drill, suggest_drill
-from ..training.drill_progress import format_progress_label
+from ..training.drill_engine import get_drill, list_drills, pin_drill, suggest_drill
+from ..training.drill_progress import format_progress_label, get_completed_drill_badges
 from ..training.simulation import evaluate_tick, list_scenarios
 from .medieval.icons import Icon
 from .medieval.widgets import MedievalPanel, SectionHeader
@@ -73,6 +74,12 @@ class TrainingTab(QWidget):
         self.panel_pinned.add_widget(self.lbl_pinned)
         root.addWidget(self.panel_pinned)
 
+        self.panel_badges = MedievalPanel("Drill Achievements", Icon.LADDER)
+        self.lbl_drill_badges = QLabel("Complete a pinned drill (3/3 games) to earn badges.")
+        self.lbl_drill_badges.setWordWrap(True)
+        self.panel_badges.add_widget(self.lbl_drill_badges)
+        root.addWidget(self.panel_badges)
+
         self.panel_sim = MedievalPanel("Simulation (offline timing)", Icon.TIMER)
         self.lbl_sim = QLabel("Pick a scenario and run a mental build at your desk.")
         self.lbl_sim.setWordWrap(True)
@@ -117,11 +124,14 @@ class TrainingTab(QWidget):
         root.addWidget(btn_play)
 
     def refresh(self) -> None:
-        stats = get_summary_stats()
+        stats = get_platform_stats()
+        wr = float(
+            stats.get("ranked_win_rate") or stats.get("replay_win_rate") or stats.get("win_rate") or 0
+        )
         drill = suggest_drill(
             feudal_sec=stats.get("avg_feudal_sec"),
             overlay_alert=settings.overlay_coach_alert,
-            win_rate=float(stats.get("win_rate") or 0),
+            win_rate=wr,
         )
         self.lbl_suggested.setText(
             f"<b>{drill.title}</b> ({drill.focus})<br><br>{drill.instructions}"
@@ -136,6 +146,14 @@ class TrainingTab(QWidget):
         else:
             self.lbl_pinned.setText("No drill pinned — use Pin to Overlay above.")
 
+        completed = get_completed_drill_badges()
+        if completed:
+            self.lbl_drill_badges.setText("  ·  ".join(completed))
+        else:
+            self.lbl_drill_badges.setText(
+                "Complete a pinned drill (3/3 games) to earn badges here."
+            )
+
         while self._drill_layout.count():
             item = self._drill_layout.takeAt(0)
             w = item.widget()
@@ -149,11 +167,14 @@ class TrainingTab(QWidget):
         self._drill_layout.addStretch()
 
     def _pin_suggested(self) -> None:
-        stats = get_summary_stats()
+        stats = get_platform_stats()
+        wr = float(
+            stats.get("ranked_win_rate") or stats.get("replay_win_rate") or stats.get("win_rate") or 0
+        )
         drill = suggest_drill(
             feudal_sec=stats.get("avg_feudal_sec"),
             overlay_alert=settings.overlay_coach_alert,
-            win_rate=float(stats.get("win_rate") or 0),
+            win_rate=wr,
         )
         pin_drill(drill)
         self.refresh()

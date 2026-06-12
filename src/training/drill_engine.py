@@ -60,21 +60,40 @@ def suggest_drill(
     feudal_sec: Optional[int] = None,
     overlay_alert: str = "",
     win_rate: float = 0.0,
+    coach_report: str = "",
 ) -> Drill:
     """Pick the best drill from stats and coach alerts."""
     alert = (overlay_alert or settings.overlay_coach_alert or "").lower()
+    report = (coach_report or "").lower()
+    combined = f"{alert} {report}"
 
     if feudal_sec and feudal_sec > 600:
         return _DRILLS["feudal_consistency"]
-    if "loom" in alert or "boar" in alert:
+    if "loom" in combined or "boar" in combined:
         return _DRILLS["loom_discipline"]
-    if "scout" in alert or "stable" in alert:
+    if "scout" in combined or "stable" in combined:
         return _DRILLS["scout_timing"]
-    if "idle" in alert or "vill" in alert or "tc" in alert:
+    if "idle" in combined or "vill" in combined or "tc" in combined or "queue" in combined:
         return _DRILLS["no_idle_tc"]
     if win_rate < 45 and feudal_sec and feudal_sec > 540:
         return _DRILLS["feudal_consistency"]
     return _DRILLS["no_idle_tc"]
+
+
+def suggest_drill_from_postgame(
+    *,
+    overlay_alert: str,
+    feudal_sec: Optional[int],
+    coach_report: str,
+    win_rate: float = 0.0,
+) -> Drill:
+    """Adaptive drill pick after post-game coach (offline or AI)."""
+    return suggest_drill(
+        feudal_sec=feudal_sec,
+        overlay_alert=overlay_alert,
+        win_rate=win_rate,
+        coach_report=coach_report,
+    )
 
 
 def pin_drill(drill: Drill) -> None:

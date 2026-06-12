@@ -1,11 +1,13 @@
 # TRINKER — Path to 100% Platform Vision
 
-Current estimate: **~65%** of full vision (after v3.2 Performance Hub).  
+Current estimate: **~72%** of full vision (after v3.3).  
 Target: **100%** = one-click launcher + trusted data + closed training loop + distribution + discoverability.
+
+**Full north-star roadmap (no timelines):** [`docs/NORTH_STAR.md`](NORTH_STAR.md)
 
 ---
 
-## Phase 1 — One-click experience (target: 65%) ✅ in progress
+## Phase 1 — One-click experience ✅ ~complete
 
 | Item | Status |
 |------|--------|
@@ -19,21 +21,22 @@ Target: **100%** = one-click launcher + trusted data + closed training loop + di
 
 ---
 
-## Phase 2 — Trusted replay data (target: 75%)
+## Phase 2 — Trusted replay data (target: 85%)
 
 | Item | Status |
 |------|--------|
 | mgz parser with quality labels | partial |
 | Replay engine v2 (multi-source merge) | ✅ |
 | Pro benchmark DB (32 rows + JSON import) | ✅ |
-| DE v101 replay corpus in CI | partial |
-| Remote corpus download URLs | infra only |
+| Honest training vs ranked stats | ✅ v3.3 |
+| Real DE v101 replay corpus in CI | partial — see `docs/CORPUS.md` |
+| Remote corpus download URLs | ✅ infra |
 | Event-level timing reconstruction | not started |
 | Clear “low quality” UX in Dashboard | ✅ Performance Hub |
 
 ---
 
-## Phase 3 — Live game intelligence (target: 82%)
+## Phase 3 — Live game intelligence (target: 92%)
 
 | Item | Status |
 |------|--------|
@@ -45,19 +48,20 @@ Target: **100%** = one-click launcher + trusted data + closed training loop + di
 
 ---
 
-## Phase 4 — Training platform (target: 90%)
+## Phase 4 — Training platform (target: 92%)
 
 | Item | Status |
 |------|--------|
 | Drills + pin + progress 3/3 | ✅ |
+| Adaptive drills from coach | ✅ v3.3 |
+| Drill completion badges | ✅ v3.3 |
 | Simulation stub | ✅ |
 | Practice tab (advanced) | ✅ |
-| Adaptive drills from coach/LLM | not started |
-| Drill completion badges | not started |
+| LLM-generated custom drills | not started |
 
 ---
 
-## Phase 5 — AI coach + distribution (target: 95%)
+## Phase 5 — AI coach + distribution (target: 96%)
 
 | Item | Status |
 |------|--------|
@@ -93,12 +97,15 @@ Optional: `RELEASE.bat --with-exe` after `BUILD_EXE.bat` to attach `TRINKER.exe`
 
 ---
 
-## Milestone targets
+## Milestone targets (% vision)
 
-| When | Version | % vision |
-|------|---------|----------|
-| Now | 3.1.1 | ~60% |
-| +4 weeks | 3.2 | ~75% (replay trust) |
-| +8 weeks | 3.3 | ~85% (live sync + drills) |
-| +12 weeks | 4.0 | ~95% (signed exe + coach) |
-| +16 weeks | 4.1 | **100%** (polish + discoverability) |
+| Version | Focus | ~% |
+|---------|-------|-----|
+| 3.2.0 | Performance Hub, engine v2, benchmarks | 65% |
+| **3.3.0** | Honest stats, adaptive drills, badges | **72%** |
+| 3.4 | Real replay corpus + clock OCR | 82% |
+| 3.5 | Embeddings RAG + signed exe | 90% |
+| 4.0 | Community packs + plugin browser | 96% |
+| 4.1 | Screenshots, polish, telemetry opt-in | **100%** |
+
+See [`docs/NORTH_STAR.md`](NORTH_STAR.md) for the full opinionated roadmap beyond 100%.

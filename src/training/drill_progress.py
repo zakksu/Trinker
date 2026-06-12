@@ -59,6 +59,16 @@ def record_drill_game(*, feudal_sec: Optional[int] = None) -> Optional[str]:
     track("drill_game_recorded", drill_id=drill_id, games_done=done, feudal_sec=feudal_sec)
 
     if done >= target:
+        from ..core.database import now_iso
+
+        completed = kv_get_json("drill_completed_ids", [])
+        if drill_id not in completed:
+            completed.append(drill_id)
+            kv_set_json("drill_completed_ids", completed)
+        kv_set_json(
+            f"drill_completed_at:{drill_id}",
+            {"title": drill.title, "completed_at": now_iso(), "focus": drill.focus},
+        )
         settings.active_drill_id = ""
         settings.overlay_coach_alert = ""
         settings.save()
@@ -67,6 +77,20 @@ def record_drill_game(*, feudal_sec: Optional[int] = None) -> Optional[str]:
 
     remaining = target - done
     return f"Drill progress: {drill.title} ({done}/{target}) — {remaining} game(s) left."
+
+
+def get_completed_drill_badges() -> list[str]:
+    """Drill-specific achievement labels for Dashboard / Training Arena."""
+    completed = kv_get_json("drill_completed_ids", [])
+    badges: list[str] = []
+    for drill_id in completed:
+        drill = get_drill(drill_id)
+        if drill:
+            badges.append(f"🎯 {drill.title}")
+        meta = kv_get_json(f"drill_completed_at:{drill_id}", {})
+        if meta.get("title") and not drill:
+            badges.append(f"🎯 {meta['title']}")
+    return badges
 
 
 def format_progress_label(drill_id: str) -> str:

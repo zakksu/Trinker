@@ -125,6 +125,36 @@ def run_corpus_assertions(base: Path) -> list[CorpusResult]:
                             CorpusResult(rid, path, False, "offline coach missing feudal context")
                         )
                         continue
+                if expect.get("suggested_drill_id") and not result.suggested_drill_id:
+                    results.append(CorpusResult(rid, path, False, "missing suggested_drill_id"))
+                    continue
+
+            if expect.get("engine_v2_quality_min") or expect.get("feudal_sec_min"):
+                from src.replay.engine_v2 import extract_replay_v2
+
+                v2 = extract_replay_v2(path)
+                rank = {"rejected": 0, "low": 1, "medium": 2, "high": 3}
+                min_q = expect.get("engine_v2_quality_min", "rejected")
+                if rank.get(v2.data_quality, 0) < rank.get(min_q, 0):
+                    results.append(
+                        CorpusResult(
+                            rid, path, False, f"quality {v2.data_quality} < {min_q}",
+                        )
+                    )
+                    continue
+                feudal = v2.feudal_time_sec
+                if expect.get("feudal_sec_min") and feudal is not None:
+                    if feudal < int(expect["feudal_sec_min"]):
+                        results.append(
+                            CorpusResult(rid, path, False, f"feudal {feudal} below min")
+                        )
+                        continue
+                if expect.get("feudal_sec_max") and feudal is not None:
+                    if feudal > int(expect["feudal_sec_max"]):
+                        results.append(
+                            CorpusResult(rid, path, False, f"feudal {feudal} above max")
+                        )
+                        continue
 
             results.append(CorpusResult(rid, path, True, "ok"))
         except Exception as exc:

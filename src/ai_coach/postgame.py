@@ -23,6 +23,7 @@ class PostGameCoachResult:
     report: str
     suggested_build: str = ""
     overlay_alert: str = ""
+    suggested_drill_id: str = ""
     used_ai: bool = False
     timeline: str = ""
     historical: str = ""
@@ -124,13 +125,16 @@ def run_postgame_coach(
         alert = "Queue vills non-stop — never idle your TC"
         if analysis.feudal_time_sec and analysis.feudal_time_sec > 600:
             alert = "Click Feudal earlier — you were late again"
-        return PostGameCoachResult(
-            report=offline,
-            suggested_build="18 Vills Scout Rush",
-            overlay_alert=alert,
-            used_ai=False,
-            timeline=timeline,
-            historical=historical,
+        return _attach_suggested_drill(
+            PostGameCoachResult(
+                report=offline,
+                suggested_build="18 Vills Scout Rush",
+                overlay_alert=alert,
+                used_ai=False,
+                timeline=timeline,
+                historical=historical,
+            ),
+            feudal_sec=analysis.feudal_time_sec,
         )
 
     try:
@@ -138,13 +142,17 @@ def run_postgame_coach(
         alert = _parse_overlay_alert(report)
         suggested = _parse_suggested_build(report)
         logger.info("Post-game coach generated (%d chars)", len(report))
-        return PostGameCoachResult(
-            report=report,
-            suggested_build=suggested,
-            overlay_alert=alert or "Focus on one clean feudal timing",
-            used_ai=True,
-            timeline=timeline,
-            historical=historical,
+        return _attach_suggested_drill(
+            PostGameCoachResult(
+                report=report,
+                suggested_build=suggested,
+                overlay_alert=alert or "Focus on one clean feudal timing",
+                used_ai=True,
+                timeline=timeline,
+                historical=historical,
+            ),
+            feudal_sec=analysis.feudal_time_sec,
+            coach_report=report,
         )
     except Exception as exc:
         logger.warning("Post-game coach failed: %s", exc)
@@ -156,13 +164,38 @@ def run_postgame_coach(
         alert = "Queue vills non-stop — never idle your TC"
         if analysis.feudal_time_sec and analysis.feudal_time_sec > 600:
             alert = "Click Feudal earlier — focus on clean Dark Age"
-        return PostGameCoachResult(
-            report=f"{offline}\n\n(AI unavailable — using offline tips.)",
-            overlay_alert=alert,
-            used_ai=False,
-            timeline=timeline,
-            historical=historical,
+        return _attach_suggested_drill(
+            PostGameCoachResult(
+                report=f"{offline}\n\n(AI unavailable — using offline tips.)",
+                overlay_alert=alert,
+                used_ai=False,
+                timeline=timeline,
+                historical=historical,
+            ),
+            feudal_sec=analysis.feudal_time_sec,
+            coach_report=offline,
         )
+
+
+def _attach_suggested_drill(
+    result: PostGameCoachResult,
+    *,
+    feudal_sec: Optional[int],
+    coach_report: str = "",
+) -> PostGameCoachResult:
+    from ..analytics.training_stats import get_platform_stats
+    from ..training.drill_engine import suggest_drill_from_postgame
+
+    stats = get_platform_stats()
+    wr = float(stats.get("ranked_win_rate") or stats.get("replay_win_rate") or 0)
+    drill = suggest_drill_from_postgame(
+        overlay_alert=result.overlay_alert,
+        feudal_sec=feudal_sec,
+        coach_report=coach_report or result.report,
+        win_rate=wr,
+    )
+    result.suggested_drill_id = drill.id
+    return result
 
 
 def pin_overlay_alert(alert: str, build_order_id: Optional[int] = None) -> None:

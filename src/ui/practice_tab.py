@@ -843,6 +843,21 @@ class PracticeTab(QWidget):
                 if self.overlay and self._selected_bo:
                     self.overlay._show_coach_alert(self._selected_bo)
 
+        if getattr(result, "suggested_drill_id", ""):
+            from ..training.drill_engine import get_drill, pin_drill
+
+            drill = get_drill(result.suggested_drill_id)
+            if drill:
+                reply = QMessageBox.question(
+                    self,
+                    "Adaptive Drill",
+                    f"Coach suggests this drill for your next games:\n\n"
+                    f"<b>{drill.title}</b>\n{drill.instructions}\n\nPin to Training Arena?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    pin_drill(drill)
+
     def _auto_fill_from_replay(self, analysis) -> None:
         """Pre-fill session fields from replay analysis data."""
         filled: list[str] = []

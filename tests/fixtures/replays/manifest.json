@@ -10,7 +10,8 @@
       "expect": {
         "filename_is_mp": true,
         "postgame_offline_alert": true,
-        "analyze_no_crash": true
+        "analyze_no_crash": true,
+        "suggested_drill_id": true
       }
     },
     {
