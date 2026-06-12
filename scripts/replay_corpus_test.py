@@ -22,22 +22,6 @@ sys.path.insert(0, str(ROOT))
 CORPUS_DIR = ROOT / "tests" / "fixtures" / "replays"
 
 
-def _maybe_download_remote(manifest: dict, base: Path) -> None:
-    import urllib.request
-
-    for entry in manifest.get("remote", []):
-        url = entry.get("url")
-        filename = entry.get("file")
-        if not url or not filename:
-            continue
-        target = base / filename
-        if target.exists():
-            continue
-        print(f"Downloading {filename} …")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        urllib.request.urlretrieve(url, target)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="TRINKER replay corpus regression")
     parser.add_argument(
@@ -53,11 +37,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from tests.fixtures.corpus_runner import ensure_corpus_files, load_manifest, run_corpus_assertions
+    from tests.fixtures.corpus_runner import ensure_corpus_files, ensure_remote_files, load_manifest, run_corpus_assertions
 
     manifest = load_manifest(args.corpus_dir)
     if args.download and manifest.get("remote"):
-        _maybe_download_remote(manifest, args.corpus_dir)
+        ensure_remote_files(args.corpus_dir)
 
     ensure_corpus_files(args.corpus_dir)
     results = run_corpus_assertions(args.corpus_dir)

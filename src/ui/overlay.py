@@ -11,6 +11,7 @@ Design goals:
   - Traffic-light color status for resource/timing feedback.
 """
 
+import time
 from typing import Optional
 
 from PySide6.QtCore import QPoint, Qt, QTimer, Signal
@@ -158,6 +159,22 @@ class ResourcePanel(QFrame):
         self._cells["gold"].setText(str(step.gold) if step.gold is not None else "—")
         self._cells["stone"].setText(str(step.stone) if step.stone is not None else "—")
         self.lbl_hint.setText(step.notes or step.description)
+
+    def set_live_snapshot(self, snap) -> None:
+        """Show OCR-read resources in the hint line (optional)."""
+        parts: list[str] = []
+        if snap.food is not None:
+            parts.append(f"food {snap.food}")
+        if snap.wood is not None:
+            parts.append(f"wood {snap.wood}")
+        if snap.gold is not None:
+            parts.append(f"gold {snap.gold}")
+        if snap.stone is not None:
+            parts.append(f"stone {snap.stone}")
+        if snap.age_text:
+            parts.append(snap.age_text)
+        if parts:
+            self.lbl_hint.setText("Live OCR: " + ", ".join(parts))
 
 
 class NextStepBanner(QFrame):
@@ -339,6 +356,8 @@ class BuildOrderOverlay(QWidget):
         self._elapsed_sec = 0
         self._drag_start: Optional[QPoint] = None
         self._hotkeys_visible = False
+        self._ocr_watcher = None
+        self._steps_visited = 0
 
         self._tick = QTimer(self)
         self._tick.setInterval(1000)
@@ -541,10 +560,17 @@ class BuildOrderOverlay(QWidget):
         """Load a build order into the overlay and reset to step 0."""
         self._build_order = bo
         self._current_index = 0
+        self._steps_visited = 0
         self.lbl_bo_name.setText(f"{bo.name} ({bo.civ})")
         self._refresh_steps()
         self._show_coach_alert(bo)
         self._auto_start_timer()
+        try:
+            from ..plugins.registry import emit
+
+            emit("overlay_loaded", build_order=bo)
+        except Exception:
+            pass
         logger.info("Overlay loaded: '%s'", bo.name)
 
     def _auto_start_timer(self) -> None:
@@ -562,6 +588,13 @@ class BuildOrderOverlay(QWidget):
             self._game_sync.start()
         self._update_pause_label()
         self.session_started.emit()
+        try:
+            from ..core.telemetry import track
+
+            bo_id = self._build_order.id if self._build_order else None
+            track("overlay_session_started", build_order_id=bo_id)
+        except Exception:
+            pass
 
     def toggle_timer_pause(self) -> bool:
         """Toggle manual pause. Returns True if timer is now paused."""
@@ -586,6 +619,7 @@ class BuildOrderOverlay(QWidget):
             self.lbl_paused.setText("")
 
     def _check_game_pause(self) -> None:
+        t0 = time.perf_counter() if settings.overlay_profile_enabled else 0.0
         if not self._is_session_active or self._manual_pause:
             return
         from ..capture.game_watcher import is_aoe2_foreground, sample_clock_region
@@ -606,6 +640,29 @@ class BuildOrderOverlay(QWidget):
             self._stall_samples = 0
             self._last_screen_hash = screen_hash
             self._set_timer_paused(False)
+
+        self._poll_ocr()
+        if settings.overlay_profile_enabled:
+            dt = time.perf_counter() - t0
+            if dt > 0.05:
+                logger.warning("overlay game-sync slow: %.3fs", dt)
+
+    def _poll_ocr(self) -> None:
+        if not settings.ocr_capture_enabled or not self._is_session_active:
+            return
+        from ..capture.game_watcher import is_aoe2_foreground
+
+        if not is_aoe2_foreground():
+            return
+        if self._ocr_watcher is None:
+            from ..capture.ocr_watcher import OcrWatcher
+
+            self._ocr_watcher = OcrWatcher()
+        if not self._ocr_watcher.is_available():
+            return
+        snap = self._ocr_watcher.read_region(settings.ocr_resource_region)
+        if snap.raw_text or snap.age_text:
+            self.resource_panel.set_live_snapshot(snap)
 
     def _show_coach_alert(self, bo: BuildOrder) -> None:
         """Display pinned post-game coaching alert if it matches this build."""
@@ -630,9 +687,11 @@ class BuildOrderOverlay(QWidget):
         """Advance to the next build step."""
         if self._build_order and self._current_index < len(self._build_order.steps) - 1:
             self._current_index += 1
+            self._steps_visited += 1
             self._refresh_steps()
             pulse_once(self.current_card)
             self.step_changed.emit(self._current_index)
+            self._emit_overlay_hook("overlay_step_changed", step_index=self._current_index)
 
     def prev_step(self) -> None:
         """Go back to the previous build step."""
@@ -680,9 +739,39 @@ class BuildOrderOverlay(QWidget):
             self.set_status(state.status, state.message)
 
     def _on_tick(self) -> None:
+        t0 = time.perf_counter() if settings.overlay_profile_enabled else 0.0
         if self._is_session_active and not self._timer_paused:
             self._elapsed_sec += 1
             self.sync_to_elapsed(self._elapsed_sec)
+            self._emit_overlay_hook(
+                "overlay_tick",
+                elapsed_sec=self._elapsed_sec,
+                step_index=self._current_index,
+                paused=self._timer_paused,
+            )
+        if settings.overlay_profile_enabled:
+            dt = time.perf_counter() - t0
+            if dt > 0.05:
+                logger.warning("overlay tick slow: %.3fs", dt)
+
+    def apply_theme(self) -> None:
+        """Refresh overlay colors after civ skin / theme change."""
+        if use_medieval_style():
+            self.container.setStyleSheet(
+                overlay_container_stylesheet(get_palette(), settings.overlay_opacity)
+            )
+        self.lbl_title.setStyleSheet(
+            f"color: {get_palette().gold if use_medieval_style() else ACCENT}; "
+            f"font-size: 10px; font-weight: bold; letter-spacing: 2px;"
+        )
+
+    def _emit_overlay_hook(self, name: str, **payload) -> None:
+        try:
+            from ..plugins.registry import emit
+
+            emit(name, **payload)
+        except Exception:
+            pass
 
     def get_current_step(self) -> Optional[BuildStep]:
         """Return the currently displayed step, or None."""
@@ -762,6 +851,11 @@ class BuildOrderOverlay(QWidget):
             self._tick.stop()
             self._game_sync.stop()
             self.session_stopped.emit()
+            self._emit_overlay_hook(
+                "overlay_session_summary",
+                elapsed_sec=self._elapsed_sec,
+                steps_visited=self._steps_visited,
+            )
         settings.save()
         self.closed.emit()
         super().closeEvent(event)

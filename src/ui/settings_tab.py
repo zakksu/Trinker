@@ -86,6 +86,13 @@ class SettingsTab(QWidget):
         self.cb_ui_style.setToolTip("Medieval = parchment, gold, wood frames (dark theme only)")
         appear_form.addRow("UI Style", self.cb_ui_style)
 
+        self.cb_civ_skin = QComboBox()
+        from .medieval.palette import SKIN_NAMES
+
+        self.cb_civ_skin.addItems(SKIN_NAMES)
+        self.cb_civ_skin.setToolTip("Civ-themed color accents (medieval dark theme)")
+        appear_form.addRow("Civ Theme", self.cb_civ_skin)
+
         self.sp_font = QSpinBox()
         self.sp_font.setRange(8, 22)
         self.sp_font.setSuffix(" px")
@@ -145,6 +152,9 @@ class SettingsTab(QWidget):
 
         self.chk_ocr = QCheckBox("Enable OCR capture (experimental — requires mss + easyocr)")
         overlay_form.addRow("", self.chk_ocr)
+
+        self.chk_overlay_profile = QCheckBox("Log slow overlay ticks (performance profiling)")
+        overlay_form.addRow("", self.chk_overlay_profile)
         layout.addWidget(overlay_group)
 
         # ── Hotkeys ───────────────────────────────────────────────────────
@@ -175,9 +185,13 @@ class SettingsTab(QWidget):
         layout.addWidget(hotkey_hint)
 
         # ── AI Coaching ───────────────────────────────────────────────────
-        ai_group = QGroupBox("AI Coaching (requires Ollama)")
+        ai_group = QGroupBox("AI Coaching (optional — offline tips always available)")
         ai_form = QFormLayout(ai_group)
         ai_form.setSpacing(10)
+
+        self.lbl_ollama_status = QLabel("Checking Ollama…")
+        self.lbl_ollama_status.setWordWrap(True)
+        ai_form.addRow("Status", self.lbl_ollama_status)
 
         self.chk_ai_enabled = QCheckBox("Enable AI Coach (auto-enabled when Ollama is running)")
         ai_form.addRow("", self.chk_ai_enabled)
@@ -218,8 +232,8 @@ class SettingsTab(QWidget):
         self.chk_telemetry.setStyleSheet("color: #ecf0f1;")
         privacy_form.addRow("", self.chk_telemetry)
         telemetry_hint = QLabel(
-            "If enabled, aggregate (non-identifiable) build order popularity data may be "
-            "submitted to a future TRINKER server. No personal data is ever sent."
+            "If enabled, anonymous events are written locally to telemetry.jsonl in your TRINKER "
+            "data folder. No personal data is sent until a future sync server exists."
         )
         telemetry_hint.setStyleSheet("color: #7f8c8d; font-size: 10px;")
         telemetry_hint.setWordWrap(True)
@@ -271,6 +285,8 @@ class SettingsTab(QWidget):
         self.cb_theme.setCurrentIndex(max(0, idx))
         ui_idx = self.cb_ui_style.findText(getattr(settings, "ui_style", "medieval"))
         self.cb_ui_style.setCurrentIndex(max(0, ui_idx))
+        skin_idx = self.cb_civ_skin.findText(getattr(settings, "civ_skin", "default"))
+        self.cb_civ_skin.setCurrentIndex(max(0, skin_idx))
         self.sp_font.setValue(settings.font_size)
         self.slider_opacity.setValue(int(settings.overlay_opacity * 100))
         self.chk_show_timings.setChecked(settings.show_timings)
@@ -280,6 +296,7 @@ class SettingsTab(QWidget):
         self.chk_auto_replay.setChecked(settings.auto_prompt_new_replay)
         self.chk_postgame_coach.setChecked(settings.auto_postgame_coach)
         self.chk_ocr.setChecked(settings.ocr_capture_enabled)
+        self.chk_overlay_profile.setChecked(settings.overlay_profile_enabled)
         self.chk_simple_mode.setChecked(settings.simple_mode)
         self.ed_steam_id.setText(settings.steam_id)
         if settings.replay_dirs:
@@ -294,6 +311,22 @@ class SettingsTab(QWidget):
         self.ed_ollama_url.setText(settings.ollama_url)
         self.ed_ollama_model.setText(settings.ollama_model)
         self.chk_telemetry.setChecked(settings.telemetry_opt_in)
+        self._refresh_ollama_status()
+
+    def _refresh_ollama_status(self) -> None:
+        from ..services.coach_service import ollama_setup_status
+
+        st = ollama_setup_status()
+        if st["running"]:
+            self.lbl_ollama_status.setText(
+                f"● Online — {st['url']} · model: {st['model']}"
+            )
+            self.lbl_ollama_status.setStyleSheet("color: #6aab55; font-weight: bold;")
+        else:
+            self.lbl_ollama_status.setText(
+                "○ Offline — rule-based tips and RAG guides still work without Ollama."
+            )
+            self.lbl_ollama_status.setStyleSheet("color: #b8a88a;")
 
     def _save(self) -> None:
         hotkeys = {
@@ -310,6 +343,7 @@ class SettingsTab(QWidget):
 
         settings.theme = self.cb_theme.currentText()
         settings.ui_style = self.cb_ui_style.currentText()
+        settings.civ_skin = self.cb_civ_skin.currentText()
         settings.font_size = self.sp_font.value()
         settings.overlay_opacity = self.slider_opacity.value() / 100.0
         settings.show_timings = self.chk_show_timings.isChecked()
@@ -319,6 +353,7 @@ class SettingsTab(QWidget):
         settings.auto_prompt_new_replay = self.chk_auto_replay.isChecked()
         settings.auto_postgame_coach = self.chk_postgame_coach.isChecked()
         settings.ocr_capture_enabled = self.chk_ocr.isChecked()
+        settings.overlay_profile_enabled = self.chk_overlay_profile.isChecked()
         settings.simple_mode = self.chk_simple_mode.isChecked()
         settings.steam_id = self.ed_steam_id.text().strip()
         extra = self.ed_replay_dir.text().strip()
@@ -381,6 +416,7 @@ class SettingsTab(QWidget):
                 "Cannot connect to Ollama",
                 f"{exc}\n\nMake sure Ollama is running: https://ollama.ai",
             )
+        self._refresh_ollama_status()
 
 
     def _run_ollama_setup(self) -> None:

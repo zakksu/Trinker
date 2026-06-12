@@ -191,6 +191,9 @@ class DashboardTab(QWidget):
         layout.addWidget(self.panel_drill)
 
         self.panel_chat = MedievalPanel("Ask Coach", Icon.ASK)
+        self.lbl_coach_mode = QLabel("")
+        self.lbl_coach_mode.setWordWrap(True)
+        self.panel_chat.add_widget(self.lbl_coach_mode)
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
         self.chat_history.setPlaceholderText("Ask about your last game, timings, or build order…")
@@ -393,12 +396,24 @@ class DashboardTab(QWidget):
             )
 
     def _render_drill(self, stats: dict) -> None:
+        from ..core.config import settings as cfg
+        from ..training.drill_progress import format_progress_label, get_drill
+
         drill = suggest_drill(
             feudal_sec=stats.get("avg_feudal_sec"),
-            overlay_alert=settings.overlay_coach_alert,
+            overlay_alert=cfg.overlay_coach_alert,
             win_rate=float(stats.get("win_rate") or 0),
         )
-        self.lbl_drill.setText(f"{Icon.COACH} {drill.title}\n{drill.instructions}")
+        progress = ""
+        if cfg.active_drill_id:
+            progress = f" [{format_progress_label(cfg.active_drill_id)}]"
+        self.lbl_drill.setText(f"{Icon.COACH} {drill.title}{progress}\n{drill.instructions}")
+        if cfg.active_drill_id:
+            active = get_drill(cfg.active_drill_id)
+            if active and active.id != drill.id:
+                self.lbl_drill.setText(
+                    f"{Icon.OVERLAY} Active: {active.title}{progress}\n{active.instructions}"
+                )
 
     def _pin_next_drill(self) -> None:
         stats = get_summary_stats()
@@ -448,6 +463,16 @@ class DashboardTab(QWidget):
         self._render_compare(feudal_sec, castle_sec, imperial_sec)
 
         self._render_drill(stats)
+
+        from ..ai_coach.coach import _is_ollama_available
+
+        if _is_ollama_available():
+            self.lbl_coach_mode.setText("")
+        else:
+            self.lbl_coach_mode.setText(
+                "○ Offline mode — rule-based tips. Enable Ollama in Settings for AI replies."
+            )
+            self.lbl_coach_mode.setStyleSheet("color: #b8a88a; font-size: 11px;")
 
         if settings.overlay_coach_alert:
             self.lbl_coach.setText(f"{Icon.COACH}  {settings.overlay_coach_alert}")

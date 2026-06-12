@@ -79,6 +79,13 @@ def suggest_drill(
 
 def pin_drill(drill: Drill) -> None:
     """Save drill as overlay alert for next session."""
+    from ..core.telemetry import track
+    from ..plugins.registry import emit
+    from .drill_progress import reset_drill_progress
+
     settings.overlay_coach_alert = drill.instructions[:120]
     settings.active_drill_id = drill.id
     settings.save()
+    reset_drill_progress(drill.id)
+    track("drill_pinned", drill_id=drill.id, focus=drill.focus)
+    emit("drill_pinned", drill=drill)

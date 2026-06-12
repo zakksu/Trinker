@@ -4,7 +4,7 @@ TRINKER 3.0 - Training Arena tab (drills + pinned coach goals).
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
 from ..analytics.session import get_summary_stats
 from ..core.config import settings
 from ..training.drill_engine import list_drills, pin_drill, suggest_drill
+from ..training.drill_progress import format_progress_label
+from ..training.simulation import evaluate_tick, list_scenarios
 from .medieval.icons import Icon
 from .medieval.widgets import MedievalPanel, SectionHeader
 from .notifications import show_toast
@@ -71,6 +73,25 @@ class TrainingTab(QWidget):
         self.panel_pinned.add_widget(self.lbl_pinned)
         root.addWidget(self.panel_pinned)
 
+        self.panel_sim = MedievalPanel("Simulation (offline timing)", Icon.TIMER)
+        self.lbl_sim = QLabel("Pick a scenario and run a mental build at your desk.")
+        self.lbl_sim.setWordWrap(True)
+        self.panel_sim.add_widget(self.lbl_sim)
+        sim_row = QHBoxLayout()
+        self.cb_sim = QComboBox()
+        for sc in list_scenarios():
+            self.cb_sim.addItem(sc.title, sc.id)
+        sim_row.addWidget(self.cb_sim, 1)
+        self.btn_sim_start = QPushButton("Start Sim")
+        self.btn_sim_start.clicked.connect(self._toggle_sim)
+        sim_row.addWidget(self.btn_sim_start)
+        self.panel_sim.add_layout(sim_row)
+        root.addWidget(self.panel_sim)
+        self._sim_elapsed = 0
+        self._sim_timer = QTimer(self)
+        self._sim_timer.setInterval(1000)
+        self._sim_timer.timeout.connect(self._sim_tick)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -108,7 +129,10 @@ class TrainingTab(QWidget):
         self.lbl_suggested.setTextFormat(Qt.TextFormat.RichText)
 
         if settings.overlay_coach_alert:
-            self.lbl_pinned.setText(f"{Icon.OVERLAY}  {settings.overlay_coach_alert}")
+            prog = ""
+            if settings.active_drill_id:
+                prog = f" ({format_progress_label(settings.active_drill_id)})"
+            self.lbl_pinned.setText(f"{Icon.OVERLAY}  {settings.overlay_coach_alert}{prog}")
         else:
             self.lbl_pinned.setText("No drill pinned — use Pin to Overlay above.")
 
@@ -143,3 +167,29 @@ class TrainingTab(QWidget):
             pin_drill(drill)
             self.refresh()
             show_toast(f"Pinned: {drill.title}", "success")
+
+    def _toggle_sim(self) -> None:
+        if self._sim_timer.isActive():
+            self._sim_timer.stop()
+            self.btn_sim_start.setText("Start Sim")
+            return
+        self._sim_elapsed = 0
+        self._sim_timer.start()
+        self.btn_sim_start.setText("Stop Sim")
+        self._sim_tick()
+
+    def _sim_tick(self) -> None:
+        from ..training.simulation import get_scenario
+
+        sc = get_scenario(self.cb_sim.currentData())
+        if not sc:
+            return
+        self._sim_elapsed += 1
+        hint = evaluate_tick(sc, self._sim_elapsed)
+        self.lbl_sim.setText(f"<b>{sc.title}</b> — {_fmt(self._sim_elapsed)}<br>{hint}")
+        self.lbl_sim.setTextFormat(Qt.TextFormat.RichText)
+
+
+def _fmt(sec: int) -> str:
+    m, s = divmod(max(0, sec), 60)
+    return f"{m}:{s:02d}"

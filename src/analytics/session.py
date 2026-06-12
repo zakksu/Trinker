@@ -116,6 +116,23 @@ def save_session(session: Session) -> Session:
             session.id = cur.lastrowid
             logger.info("Session %d saved (BO id=%d)", session.id, session.build_order_id)
 
+            from ..training.drill_progress import record_drill_game
+
+            msg = record_drill_game(feudal_sec=session.feudal_time_sec)
+            if msg:
+                logger.info(msg)
+
+            from ..core.telemetry import track
+            from ..plugins.registry import emit
+
+            track(
+                "session_saved",
+                build_order_id=session.build_order_id,
+                result=session.result,
+                feudal_sec=session.feudal_time_sec,
+            )
+            emit("session_saved", session=session)
+
             # Insert milestones
             for ms in session.milestones:
                 ms.session_id = session.id

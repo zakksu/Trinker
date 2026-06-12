@@ -32,6 +32,7 @@ def load_manifest(base: Path) -> dict:
 
 def ensure_corpus_files(base: Path) -> list[Path]:
     """Generate or verify local replay files listed in manifest.json."""
+    ensure_remote_files(base)
     manifest = load_manifest(base)
     paths: list[Path] = []
     for entry in manifest.get("replays", []):
@@ -46,6 +47,33 @@ def ensure_corpus_files(base: Path) -> list[Path]:
         if target.exists():
             paths.append(target)
     return paths
+
+
+def ensure_remote_files(base: Path) -> None:
+    """Download remote corpus entries when URL is listed in manifest."""
+    import hashlib
+    import urllib.request
+
+    manifest = load_manifest(base)
+    for entry in manifest.get("remote", []):
+        url = entry.get("url")
+        filename = entry.get("file")
+        if not url or not filename:
+            continue
+        target = base / filename
+        if target.exists() and not entry.get("sha256"):
+            continue
+        if target.exists() and entry.get("sha256"):
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            if digest == entry["sha256"]:
+                continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        urllib.request.urlretrieve(url, target)
+        if entry.get("sha256"):
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            if digest != entry["sha256"]:
+                target.unlink(missing_ok=True)
+                raise ValueError(f"SHA256 mismatch for {filename}")
 
 
 def run_corpus_assertions(base: Path) -> list[CorpusResult]:

@@ -138,10 +138,14 @@ class TrinkerMainWindow(QMainWindow):
         self._shortcuts: list[QShortcut] = []
         self._toast_host: Optional[ToastHost] = None
         self._global_hotkeys: Optional[GlobalHotkeyManager] = None
+        self.practice_tab: Optional[QWidget] = None
         self._setup_menu()
         self._setup_ui()
         self._setup_hotkeys()
         self._setup_background_services()
+        from ..plugins.loader import load_plugins
+
+        load_plugins()
 
         self._global_hotkeys = GlobalHotkeyManager(self)
         self._global_hotkeys.set_callback("toggle_overlay", self._toggle_overlay)
@@ -168,6 +172,7 @@ class TrinkerMainWindow(QMainWindow):
             getattr(self, "library_tab", None),
             getattr(self, "analytics_tab", None),
             getattr(self, "settings_tab", None),
+            getattr(self, "practice_tab", None),
         ):
             if tab and hasattr(tab, "apply_theme"):
                 tab.apply_theme(name)
@@ -275,6 +280,9 @@ class TrinkerMainWindow(QMainWindow):
         self.settings_tab.settings_changed.connect(self._on_settings_changed)
         self.settings_tab.theme_preview_changed.connect(self._preview_theme)
 
+        self._practice_tab_index: Optional[int] = None
+        self._sync_practice_tab()
+
         self._toast_host = ToastHost(central)
         set_toast_host(self._toast_host)
 
@@ -317,7 +325,30 @@ class TrinkerMainWindow(QMainWindow):
         if self._pending_bo:
             overlay.load_build_order(self._pending_bo)
             self._pending_bo = None
+        if hasattr(self, "practice_tab") and self.practice_tab:
+            self.practice_tab.overlay = overlay
         return overlay
+
+    def _sync_practice_tab(self) -> None:
+        """Show advanced Practice tab when simple_mode is off."""
+        from .practice_tab import PracticeTab
+
+        want = not settings.simple_mode
+        has = hasattr(self, "practice_tab") and self.practice_tab is not None
+
+        if want and not has:
+            self.practice_tab = PracticeTab(overlay=self._overlay)
+            self.practice_tab.session_saved.connect(self.analytics_tab.refresh)
+            self._practice_tab_index = self.tabs.insertTab(3, self.practice_tab, "⏱  Practice")
+        elif not want and has:
+            idx = self.tabs.indexOf(self.practice_tab)
+            if idx >= 0:
+                self.tabs.removeTab(idx)
+            self.practice_tab.deleteLater()
+            self.practice_tab = None
+            self._practice_tab_index = None
+        elif want and has and self._overlay:
+            self.practice_tab.overlay = self._overlay
 
     def _toggle_overlay(self) -> None:
         self.header.btn_overlay.setChecked(not self.header.btn_overlay.isChecked())
@@ -456,8 +487,11 @@ class TrinkerMainWindow(QMainWindow):
 
     def _on_settings_changed(self) -> None:
         self._apply_theme()
+        self._sync_practice_tab()
         if self._overlay:
             self._overlay.set_opacity(settings.overlay_opacity)
+            if hasattr(self._overlay, "apply_theme"):
+                self._overlay.apply_theme()
         self._reload_hotkeys()
         if self._global_hotkeys:
             self._global_hotkeys.register()

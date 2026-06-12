@@ -152,7 +152,8 @@ class AppSettings:
 
     theme: str = "dark"  # "dark" | "light"
     ui_style: str = "medieval"  # "medieval" | "classic"
-    accent_color: str = "#3498db"  # primary accent (future UI theming)
+    civ_skin: str = "default"  # default | britons | franks | chinese | byzantines | mayans
+    accent_color: str = "#3498db"  # primary accent (classic dark theme)
     overlay_opacity: float = 0.88  # 0.0 – 1.0
     overlay_position: list[int] = field(default_factory=lambda: [100, 100])
     overlay_size: list[int] = field(default_factory=lambda: [300, 340])
@@ -178,6 +179,10 @@ class AppSettings:
     overlay_coach_alert: str = ""  # pinned reminder for next overlay session
     overlay_coach_alert_bo_id: Optional[int] = None
     ocr_capture_enabled: bool = False  # optional live OCR (mss + easyocr)
+    overlay_profile_enabled: bool = False  # log slow overlay ticks (dev)
+    ocr_resource_region: dict = field(
+        default_factory=lambda: {"left": 0, "top": 0, "width": 220, "height": 48}
+    )
     simple_mode: bool = True  # hide advanced Practice panels
     last_practice_bo_id: Optional[int] = None
     auto_detect_sessions: bool = True  # auto-import replays in background

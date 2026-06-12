@@ -83,6 +83,8 @@ def ask_coach(
         reply = _offline_coaching_tips(
             summary.feudal_sec, summary.castle_sec, summary.accuracy_pct,
         )
+        if not reply.startswith("[Offline"):
+            reply = "[Offline tips] " + reply
         save_coach_message(thread_key, "assistant", reply)
         return reply
 

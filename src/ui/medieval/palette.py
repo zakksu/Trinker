@@ -38,9 +38,56 @@ class MedievalPalette:
     overlay_border: str = "#6b4c3b"
 
 
+SKINS: dict[str, MedievalPalette] = {
+    "default": MedievalPalette(),
+    "britons": MedievalPalette(
+        gold="#c9a227",
+        gold_bright="#e8c547",
+        wood_frame="#5a4a38",
+        parchment="#2a2418",
+    ),
+    "franks": MedievalPalette(
+        gold="#3b6ea8",
+        gold_bright="#5a8fc4",
+        wood_frame="#4a5560",
+        parchment="#1e2430",
+        feudal="#4a7ab8",
+    ),
+    "chinese": MedievalPalette(
+        gold="#c0392b",
+        gold_bright="#e74c3c",
+        wood_frame="#6b3030",
+        parchment="#281818",
+        feudal="#d35400",
+    ),
+    "byzantines": MedievalPalette(
+        gold="#9b59b6",
+        gold_bright="#bb77d4",
+        wood_frame="#4a3a5c",
+        parchment="#221a2e",
+        castle="#8e44ad",
+    ),
+    "mayans": MedievalPalette(
+        gold="#27ae60",
+        gold_bright="#2ecc71",
+        wood_frame="#3d5c40",
+        parchment="#1a2820",
+        feudal="#1e8449",
+    ),
+}
+
+SKIN_NAMES: list[str] = list(SKINS.keys())
+
+
+def get_skin_palette(skin_id: str | None) -> MedievalPalette:
+    key = (skin_id or "default").lower()
+    return SKINS.get(key, SKINS["default"])
+
+
 def get_palette() -> MedievalPalette:
-    """Return palette; gold accent can follow user accent in future."""
-    return MedievalPalette()
+    """Return palette for the active civ skin (Settings → Civ Theme)."""
+    skin = getattr(settings, "civ_skin", "default") or "default"
+    return get_skin_palette(skin)
 
 
 def use_medieval_style() -> bool:

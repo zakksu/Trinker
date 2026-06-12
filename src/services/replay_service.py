@@ -76,9 +76,11 @@ def import_replay_profile(
     logger.info("ReplayService: %s", result.message)
 
     try:
+        from ..core.telemetry import track
         from ..plugins.registry import emit
 
         emit("replay_imported", profile=profile, session_id=session.id, result=result)
+        track("replay_imported", civ=profile.civ, quality=profile.data_quality)
     except Exception:
         pass
 

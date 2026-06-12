@@ -186,7 +186,8 @@ On **Windows**, enable **Global hotkeys** in Settings to use these while AoE2 ha
 | **v2.2** ✅ | Win-rate heatmaps, streak badges, cross-platform CI + platformdirs |
 | **v2.3** ✅ | Expanded pytest-qt suite, replay corpus tests, E2E CI flows |
 | **v3.0** ✅ | Training Arena, RAG coach, global hotkeys, library cards, plugin hooks |
-| **Future** | Civ-themed skins, replay corpus downloads, signed releases, simulation engine |
+| **v3.1** ✅ | Civ skins, drill progress, telemetry, OCR wiring, simulation stub, practice tab |
+| **Future** | Replay corpus downloads (public URLs), signed releases, macOS/Linux global hotkeys |
 
 Track progress in [GitHub Issues](https://github.com/zakksu/Trinker/issues) and [Releases](https://github.com/zakksu/Trinker/releases).
 

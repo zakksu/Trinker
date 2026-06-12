@@ -52,6 +52,17 @@ class BuildOrderCard(QFrame):
         footer.setStyleSheet(f"color: {p.ink_muted}; font-size: 10px;")
         layout.addWidget(footer)
 
+        preview_lines = []
+        for step in bo.steps[:3]:
+            text = (step.description or "").strip()
+            if text:
+                preview_lines.append(f"• {text[:48]}{'…' if len(text) > 48 else ''}")
+        if preview_lines:
+            preview = QLabel("\n".join(preview_lines))
+            preview.setWordWrap(True)
+            preview.setStyleSheet(f"color: {p.ink_dim}; font-size: 10px;")
+            layout.addWidget(preview)
+
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._bo)
