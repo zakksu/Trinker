@@ -5,7 +5,7 @@ User-configurable preferences: theme, overlay, hotkeys, AI coaching, data manage
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -241,6 +241,41 @@ class SettingsTab(QWidget):
         layout.addWidget(ai_group)
         layout.addWidget(ai_hint)
 
+        # ── Pro Coach (Hera) ─────────────────────────────────────────────
+        pro_group = QGroupBox("Pro Coach — Hera (replay-trained Ollama model)")
+        pro_form = QFormLayout(pro_group)
+        pro_form.setSpacing(10)
+
+        self.lbl_pro_status = QLabel("—")
+        self.lbl_pro_status.setWordWrap(True)
+        pro_form.addRow("Corpus", self.lbl_pro_status)
+
+        self.ed_pro_model = QLineEdit()
+        self.ed_pro_model.setPlaceholderText("trinker-hera")
+        pro_form.addRow("Pro model", self.ed_pro_model)
+
+        pro_btns = QHBoxLayout()
+        btn_build_hera = QPushButton("Build Hera Coach")
+        btn_build_hera.setToolTip(
+            "Scan replays where Hera appears → RAG corpus → ollama create trinker-hera"
+        )
+        btn_build_hera.clicked.connect(self._build_hera_coach)
+        pro_btns.addWidget(btn_build_hera)
+        btn_corpus_only = QPushButton("Corpus Only")
+        btn_corpus_only.setToolTip("Rebuild knowledge files without ollama create")
+        btn_corpus_only.clicked.connect(lambda: self._build_hera_coach(corpus_only=True))
+        pro_btns.addWidget(btn_corpus_only)
+        pro_form.addRow("", pro_btns)
+
+        pro_hint = QLabel(
+            "Drop Hera .aoe2record files in data/pro_replays/hera/ or run SETUP_HERA_COACH.bat.\n"
+            "Uses Ollama Modelfile + parsed replay stats (not full GPU fine-tune). Team + 1v1 OK."
+        )
+        pro_hint.setStyleSheet("color: #7f8c8d; font-size: 10px;")
+        pro_hint.setWordWrap(True)
+        layout.addWidget(pro_group)
+        layout.addWidget(pro_hint)
+
         # ── Privacy ───────────────────────────────────────────────────────
         privacy_group = QGroupBox("Privacy")
         privacy_form = QFormLayout(privacy_group)
@@ -327,8 +362,24 @@ class SettingsTab(QWidget):
         self.chk_global_hotkeys.setChecked(settings.global_hotkeys_enabled)
         self.ed_ollama_url.setText(settings.ollama_url)
         self.ed_ollama_model.setText(settings.ollama_model)
+        self.ed_pro_model.setText(getattr(settings, "pro_coach_model", "trinker-hera") or "trinker-hera")
         self.chk_telemetry.setChecked(settings.telemetry_opt_in)
         self._refresh_ollama_status()
+        self._refresh_pro_coach_status()
+
+    def _refresh_pro_coach_status(self) -> None:
+        count = getattr(settings, "pro_corpus_game_count", 0)
+        built = getattr(settings, "pro_corpus_built_at", "") or "never"
+        if count > 0:
+            self.lbl_pro_status.setText(
+                f"✓ {count} Hera game(s) in corpus · last built {built[:19]}"
+            )
+            self.lbl_pro_status.setStyleSheet("color: #6aab55; font-size: 11px;")
+        else:
+            self.lbl_pro_status.setText(
+                "○ No Hera replays parsed yet — drop files in data/pro_replays/hera/"
+            )
+            self.lbl_pro_status.setStyleSheet("color: #b8a88a; font-size: 11px;")
 
     def _refresh_ollama_status(self) -> None:
         from ..services.coach_service import ollama_setup_status
@@ -387,6 +438,7 @@ class SettingsTab(QWidget):
         settings.global_hotkeys_enabled = self.chk_global_hotkeys.isChecked()
         settings.ollama_url = self.ed_ollama_url.text().strip() or "http://localhost:11434"
         settings.ollama_model = self.ed_ollama_model.text().strip() or "llama3"
+        settings.pro_coach_model = self.ed_pro_model.text().strip() or "trinker-hera"
         settings.telemetry_opt_in = self.chk_telemetry.isChecked()
         settings.save()
         self._refresh_replay_access()
@@ -452,6 +504,31 @@ class SettingsTab(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Setup", str(exc))
 
+    def _build_hera_coach(self, corpus_only: bool = False) -> None:
+        if getattr(self, "_hera_thread", None) and self._hera_thread.isRunning():
+            show_toast("Hera coach build already running…", "info")
+            return
+        self.lbl_pro_status.setText("Building Hera coach — scanning replays…")
+        self.lbl_pro_status.setStyleSheet("color: #c9a227; font-size: 11px;")
+        self._hera_thread = _HeraBuildWorker(corpus_only=corpus_only)
+        self._hera_thread.finished.connect(self._on_hera_build_done)
+        self._hera_thread.start()
+
+    def _on_hera_build_done(self, ok: bool, msg: str, count: int) -> None:
+        self._refresh_pro_coach_status()
+        if ok:
+            self.ed_ollama_model.setText(settings.ollama_model)
+            self.ed_pro_model.setText(settings.pro_coach_model)
+            show_toast(msg[:120], "success")
+            QMessageBox.information(self, "Hera Coach", msg)
+        else:
+            show_toast("Hera coach build failed", "error")
+            QMessageBox.warning(
+                self,
+                "Hera Coach",
+                f"{msg}\n\nDrop Hera replays in data/pro_replays/hera/ and retry.",
+            )
+
     def _refresh_replay_access(self) -> None:
         from ..core.replay_paths import probe_replay_access
 
@@ -512,6 +589,26 @@ class SettingsTab(QWidget):
                 "Typical path:\n"
                 "Documents\\My Games\\Age of Empires 2 DE\\<SteamID>\\savegame",
             )
+
+
+class _HeraBuildWorker(QThread):
+    finished = Signal(bool, str, int)
+
+    def __init__(self, corpus_only: bool = False):
+        super().__init__()
+        self.corpus_only = corpus_only
+
+    def run(self) -> None:
+        try:
+            from ..ai_coach.modelfile_builder import full_pro_coach_build
+
+            _result, ok, msg = full_pro_coach_build(
+                "Hera",
+                create_model=not self.corpus_only,
+            )
+            self.finished.emit(ok, msg, _result.game_count())
+        except Exception as exc:
+            self.finished.emit(False, str(exc), 0)
 
 
 def _open_dir(path: Path) -> None:

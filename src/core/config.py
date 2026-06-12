@@ -192,6 +192,10 @@ class AppSettings:
     dashboard_show_charts: bool = True
     dashboard_show_patterns: bool = True
     ollama_setup_dismissed: bool = False
+    pro_coach_player: str = "Hera"
+    pro_coach_model: str = "trinker-hera"
+    pro_corpus_built_at: str = ""
+    pro_corpus_game_count: int = 0
     overlay_profile_enabled: bool = False  # log slow overlay ticks (dev)
     ocr_capture_enabled: bool = False  # live resource OCR on overlay
     ocr_resource_region: dict = field(

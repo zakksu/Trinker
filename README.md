@@ -86,6 +86,7 @@ Whether you are learning your first Meta Knight rush or tightening a 22-pop arch
 | **`LAUNCHER.bat`** | **Recommended** — update popup + latest version + launch |
 | **`FIND_REPLAYS.bat`** | Scan Documents / OneDrive / Steam for `.aoe2record` folders |
 | **`SETUP_AI.bat`** | Optional local AI coach (Ollama) setup |
+| **`SETUP_HERA_COACH.bat`** | Build `trinker-hera` model from Hera replay files |
 | **`TRINKER.bat`** | Same as LAUNCHER.bat |
 | **`RELEASE.bat`** | Publish to GitHub (confirmation popup first) |
 | **`UPDATE_AND_RUN.bat`** | Pull + launch (no launcher UI) |
