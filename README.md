@@ -92,16 +92,23 @@ See also: [`README_WINDOWS.txt`](README_WINDOWS.txt) for troubleshooting and AI 
 ```bash
 git clone https://github.com/zakksu/Trinker.git
 cd Trinker
+chmod +x run_trinker.sh
+./run_trinker.sh
+```
+
+`run_trinker.sh` creates a `.venv`, installs dependencies, seeds builds, prints your data folder, and launches the app.
+
+Manual equivalent:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate          # macOS/Linux
 pip install -r requirements.txt
-python seed_builds.py              # optional: seed starter builds
+python seed_builds.py
 python main.py
-# or
-bash run_trinker.sh
 ```
 
-**Data directory:** `~/.local/share/TRINKER/` (via `platformdirs`).
+**Data directory:** resolved via `platformdirs` (typically `~/.local/share/TRINKER` on Linux, `~/Library/Application Support/TRINKER` on macOS).
 
 ---
 
@@ -164,8 +171,9 @@ Output: `dist\TRINKER.exe` — built with PyInstaller (`trinker.spec`).
 | Version | Focus |
 |---------|--------|
 | **v2.0** ✅ | Compare-to-build, Ask Coach chat, aoe2.gg hook, CI pipeline |
-| **v2.1** 🚧 | Medieval dark UI, dashboard cards, overlay polish |
-| **v2.2** | Cross-platform CI matrix, replay corpus tests, Ollama auto-setup + RAG |
+| **v2.1** ✅ | Medieval dark UI, dashboard cards, overlay polish |
+| **v2.2** ✅ | Win-rate heatmaps, streak badges, cross-platform CI + platformdirs |
+| **v2.3** | Replay corpus tests, Ollama auto-setup + RAG |
 | **Future** | Civ-themed skins, build preview grid, practice simulation stub, plugin hooks |
 
 Track progress in [GitHub Issues](https://github.com/zakksu/Trinker/issues) and [Releases](https://github.com/zakksu/Trinker/releases).

@@ -24,13 +24,27 @@ from PySide6.QtWidgets import (
 from ..ai_coach.chat import ask_coach, build_summary_from_latest_replay, get_coach_messages
 from ..analytics.compare import compare_to_build_order
 from ..analytics.replay_store import get_latest_replay_analysis, get_replay_analyses
-from ..analytics.session import get_sessions, get_summary_stats
+from ..analytics.session import (
+    get_activity_heatmap,
+    get_practice_streak,
+    get_sessions,
+    get_summary_stats,
+    get_training_badges,
+)
 from ..core.config import settings
 from ..integrations.aoe2gg import get_stored_matches, import_recent_matches, profile_url_for
 from .medieval.animations import stagger_fade_in
 from .medieval.icons import Icon
 from .medieval.palette import get_palette
-from .medieval.widgets import MedievalPanel, SectionHeader, StatCard, Timeline
+from .medieval.widgets import (
+    ActivityHeatmap,
+    BadgeChip,
+    CompareDiffTable,
+    MedievalPanel,
+    SectionHeader,
+    StatCard,
+    Timeline,
+)
 from .theme import apply_tab_panel, get_tokens
 
 _STATUS_ACCENTS = {
@@ -107,10 +121,32 @@ class DashboardTab(QWidget):
         self.card_sessions = StatCard(Icon.GAME, "Games Saved", "0", p.gold)
         self.card_feudal = StatCard(Icon.TIMER, "Avg Feudal", "—", p.feudal)
         self.card_quality = StatCard(Icon.QUALITY, "Last Quality", "—", p.success)
-        self._stat_cards = [self.card_sessions, self.card_feudal, self.card_quality]
+        self.card_winrate = StatCard(Icon.LADDER, "Win Rate", "—", p.gold_bright)
+        self.card_streak = StatCard(Icon.REFRESH, "Day Streak", "0", p.success)
+        self._stat_cards = [
+            self.card_sessions,
+            self.card_feudal,
+            self.card_quality,
+            self.card_winrate,
+            self.card_streak,
+        ]
         for c in self._stat_cards:
             cards.addWidget(c)
         layout.addLayout(cards)
+
+        self._badges_row = QHBoxLayout()
+        self._badges_row.setSpacing(8)
+        badges_wrap = QWidget()
+        badges_wrap.setLayout(self._badges_row)
+        layout.addWidget(badges_wrap)
+
+        heat_row = QHBoxLayout()
+        heat_row.setSpacing(12)
+        self.panel_activity = MedievalPanel("Training Activity", Icon.ANALYTICS)
+        self.activity_heatmap = ActivityHeatmap()
+        self.panel_activity.add_widget(self.activity_heatmap)
+        heat_row.addWidget(self.panel_activity, 1)
+        layout.addLayout(heat_row)
 
         self.panel_last = MedievalPanel("Last Game", Icon.GAME)
         self.lbl_last_game = QLabel("No games detected yet — play with the overlay on.")
@@ -125,6 +161,8 @@ class DashboardTab(QWidget):
         self.lbl_compare_summary.setWordWrap(True)
         self.lbl_compare_summary.setStyleSheet(f"color: {p.ink_dim}; font-size: 12px; font-weight: bold;")
         self.panel_compare.add_widget(self.lbl_compare_summary)
+        self.compare_diff = CompareDiffTable()
+        self.panel_compare.add_widget(self.compare_diff)
         self.compare_timeline = Timeline()
         self.panel_compare.add_widget(self.compare_timeline)
         layout.addWidget(self.panel_compare)
@@ -204,6 +242,7 @@ class DashboardTab(QWidget):
             if cmp.has_data()
             else cmp.summary
         )
+        self.compare_diff.set_rows(cmp.rows)
         self.compare_timeline.clear()
         for row in cmp.rows:
             accent = _STATUS_ACCENTS.get(row.status, _STATUS_ACCENTS["neutral"])
@@ -213,6 +252,22 @@ class DashboardTab(QWidget):
                 row.detail,
                 accent=accent,
             )
+
+    def _render_badges(self) -> None:
+        while self._badges_row.count():
+            item = self._badges_row.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        badges = get_training_badges()
+        if not badges:
+            self._badges_row.addWidget(
+                BadgeChip("Play your first game to earn badges")
+            )
+        else:
+            for name in badges:
+                self._badges_row.addWidget(BadgeChip(f"🏅 {name}"))
+        self._badges_row.addStretch()
 
     def _load_chat_history(self) -> None:
         msgs = get_coach_messages("dashboard")
@@ -329,6 +384,11 @@ class DashboardTab(QWidget):
         self.card_sessions.set_value(str(stats.get("total_sessions", 0)))
         feudal = stats.get("avg_feudal_sec")
         self.card_feudal.set_value(_fmt_sec(feudal) if feudal else "—")
+        self.card_winrate.set_value(f"{stats.get('win_rate', 0):.1f}%")
+        streak = get_practice_streak()
+        self.card_streak.set_value(str(streak.get("current", 0)))
+        self._render_badges()
+        self.activity_heatmap.set_data(get_activity_heatmap())
 
         latest = get_latest_replay_analysis()
         feudal_sec = castle_sec = imperial_sec = None

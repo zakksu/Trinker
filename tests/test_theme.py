@@ -1,12 +1,12 @@
 """Tests for centralized theming."""
 
+from src.ui.medieval.palette import get_palette
 from src.ui.theme import (
     get_tokens,
     stylesheet_main_window,
     stylesheet_tab_panel,
     stylesheet_table,
 )
-from src.ui.medieval.palette import get_palette
 
 
 def test_dark_tokens_have_required_fields():

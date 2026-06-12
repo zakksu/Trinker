@@ -22,10 +22,11 @@ from PySide6.QtWidgets import (
 )
 
 from ..build_orders.manager import get_all_build_orders
-from ..core.config import get_replay_search_dirs, settings
+from ..core.config import DATA_DIR, get_replay_search_dirs, settings
 from ..core.logger import logger
 from ..core.ollama import ensure_ollama_enabled, is_ollama_running
 from ..replay.parser import find_replay_files
+from .medieval.icons import Icon
 from .theme import apply_tab_panel, get_tokens
 
 
@@ -36,13 +37,16 @@ class WelcomePage(QWizardPage):
         self.setSubTitle("Your AoE2 training companion — overlay, auto-save, and AI coaching.")
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(
-            "This quick setup takes about a minute.\n\n"
+        intro = QLabel(
+            f"{Icon.TRINKER} This quick setup takes about a minute.\n\n"
             "TRINKER will:\n"
             "• Show build order steps on a game overlay\n"
             "• Auto-detect finished games and save them to Analytics\n"
             "• Connect to Ollama for post-game coaching (optional)"
-        ))
+        )
+        intro.setWordWrap(True)
+        intro.setToolTip("You can re-run setup anytime from Settings.")
+        layout.addWidget(intro)
 
 
 class ReplayFolderPage(QWizardPage):
@@ -56,15 +60,19 @@ class ReplayFolderPage(QWizardPage):
             "We look for .aoe2record files under your AoE2 DE save folder."
         )
         self.lbl_hint.setWordWrap(True)
+        self.lbl_hint.setToolTip("Default: Documents/My Games/Age of Empires 2 DE on Windows")
         layout.addWidget(self.lbl_hint)
 
         self.list_dirs = QListWidget()
+        self.list_dirs.setToolTip("Folders TRINKER scans for new replays after each game")
         layout.addWidget(self.list_dirs)
 
         row = QHBoxLayout()
         self.ed_folder = QLineEdit()
         self.ed_folder.setPlaceholderText("Optional extra replay folder…")
+        self.ed_folder.setToolTip("Add a custom folder if your replays live elsewhere")
         btn_browse = QPushButton("Browse…")
+        btn_browse.setToolTip("Pick any folder containing .aoe2record files")
         btn_browse.clicked.connect(self._browse)
         row.addWidget(self.ed_folder)
         row.addWidget(btn_browse)
@@ -102,6 +110,9 @@ class SteamIdPage(QWizardPage):
         ))
         self.ed_steam = QLineEdit()
         self.ed_steam.setPlaceholderText("76561198000000000")
+        self.ed_steam.setToolTip(
+            "17-digit Steam ID from your replay path — used for aoe2.gg ladder import"
+        )
         layout.addWidget(self.ed_steam)
         self.registerField("steam_id", self.ed_steam)
 
@@ -117,14 +128,17 @@ class OllamaPage(QWizardPage):
         layout.addWidget(self.lbl_status)
 
         self.ed_url = QLineEdit(settings.ollama_url)
+        self.ed_url.setToolTip("Default local Ollama server — usually http://localhost:11434")
         layout.addWidget(QLabel("Ollama URL"))
         layout.addWidget(self.ed_url)
 
         self.ed_model = QLineEdit(settings.ollama_model)
+        self.ed_model.setToolTip("Model you pulled with `ollama pull`, e.g. llama3 or llama3.2")
         layout.addWidget(QLabel("Model name"))
         layout.addWidget(self.ed_model)
 
         btn_test = QPushButton("Test Connection")
+        btn_test.setToolTip("Verify Ollama is running before you finish setup")
         btn_test.clicked.connect(self._test)
         layout.addWidget(btn_test)
 
@@ -155,6 +169,7 @@ class FirstBuildPage(QWizardPage):
 
         layout = QVBoxLayout(self)
         self.cb_bo = QComboBox()
+        self.cb_bo.setToolTip("Starter build orders — change anytime on Start Here")
         for bo in get_all_build_orders():
             self.cb_bo.addItem(f"{bo.name} ({bo.civ})", bo.id)
         layout.addWidget(self.cb_bo)
@@ -167,10 +182,13 @@ class DonePage(QWizardPage):
         self.setSubTitle("Open Start Here, pick your build, and show the overlay.")
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(
-            "After each game TRINKER auto-saves your replay to Analytics.\n"
-            "Check the Dashboard tab for your latest game and progress."
-        ))
+        done = QLabel(
+            f"{Icon.OVERLAY} After each game TRINKER auto-saves your replay to Analytics.\n"
+            f"{Icon.DASHBOARD} Check the Dashboard tab for stats, badges, and coach tips.\n\n"
+            f"Your data folder:\n{DATA_DIR}"
+        )
+        done.setWordWrap(True)
+        layout.addWidget(done)
 
 
 class OnboardingWizard(QWizard):

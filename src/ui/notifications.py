@@ -9,8 +9,7 @@ from typing import Optional
 from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Qt, QTimer
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QVBoxLayout, QWidget
 
-from .medieval.icons import Icon
-from .medieval.palette import get_palette, use_medieval_style
+from .medieval.palette import get_palette
 from .theme import get_tokens
 
 

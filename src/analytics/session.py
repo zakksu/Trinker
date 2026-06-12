@@ -374,6 +374,77 @@ def get_most_practiced_builds(limit: int = 10) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_practice_streak() -> dict[str, int]:
+    """
+    Consecutive calendar days with at least one session (current streak)
+    and the all-time best streak.
+    """
+    from datetime import date, timedelta
+
+    with db_conn() as conn:
+        rows = conn.execute(
+            f"""SELECT DISTINCT date FROM sessions WHERE 1=1 {_QUALITY_SQL} ORDER BY date ASC"""
+        ).fetchall()
+    if not rows:
+        return {"current": 0, "best": 0}
+
+    day_set = {date.fromisoformat(r["date"]) for r in rows if r["date"]}
+    if not day_set:
+        return {"current": 0, "best": 0}
+
+    # Best streak over sorted unique days
+    sorted_days = sorted(day_set)
+    best = current_run = 1
+    for i in range(1, len(sorted_days)):
+        if sorted_days[i] - sorted_days[i - 1] == timedelta(days=1):
+            current_run += 1
+            best = max(best, current_run)
+        else:
+            current_run = 1
+
+    # Current streak ending today or yesterday
+    today = date.today()
+    cursor = today if today in day_set else today - timedelta(days=1)
+    current = 0
+    while cursor in day_set:
+        current += 1
+        cursor -= timedelta(days=1)
+
+    return {"current": current, "best": best}
+
+
+def get_training_badges() -> list[str]:
+    """Achievement-style badges derived from saved session stats."""
+    stats = get_summary_stats()
+    streak = get_practice_streak()
+    total = int(stats.get("total_sessions") or 0)
+    badges: list[str] = []
+
+    if total >= 1:
+        badges.append("First Blood")
+    if total >= 5:
+        badges.append("Villager Recruit")
+    if total >= 15:
+        badges.append("Town Center Scholar")
+    if total >= 30:
+        badges.append("Imperial Veteran")
+
+    if streak["current"] >= 3:
+        badges.append("On a Roll")
+    if streak["best"] >= 7:
+        badges.append("Weekly Warrior")
+
+    best_feudal = stats.get("best_feudal_sec")
+    if best_feudal is not None and best_feudal <= 600:
+        badges.append("Feudal Rush")
+
+    win_rate = float(stats.get("win_rate") or 0)
+    if total >= 5 and win_rate >= 55:
+        badges.append("Ladder Climber")
+
+    return badges
+
+
 def get_activity_heatmap(year: Optional[int] = None) -> dict[str, int]:
     """
     Return a dict mapping ISO date strings to session counts for the heatmap.

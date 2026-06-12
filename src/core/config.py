@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Platform-aware application directories (no external dependency needed)
+# Platform-aware application directories
 # ---------------------------------------------------------------------------
 
 
 class _AppDirs:
-    """Minimal cross-platform directory resolver (no platformdirs dependency)."""
+    """Fallback directory resolver when platformdirs is unavailable."""
 
     def __init__(self, app_name: str):
         self.app_name = app_name
@@ -40,7 +40,30 @@ class _AppDirs:
         return str(Path(self.user_data_dir) / "cache")
 
 
-APP_DIRS = _AppDirs("TRINKER")
+def _resolve_app_dirs(app_name: str = "TRINKER") -> _AppDirs:
+    """Prefer platformdirs (XDG on Linux, standard paths on macOS/Windows)."""
+    try:
+        from platformdirs import user_cache_dir, user_data_dir, user_log_dir
+
+        class _PlatformDirs:
+            @property
+            def user_data_dir(self) -> str:
+                return user_data_dir(app_name, appauthor=False)
+
+            @property
+            def user_log_dir(self) -> str:
+                return user_log_dir(app_name, appauthor=False)
+
+            @property
+            def user_cache_dir(self) -> str:
+                return user_cache_dir(app_name, appauthor=False)
+
+        return _PlatformDirs()  # type: ignore[return-value]
+    except ImportError:
+        return _AppDirs(app_name)
+
+
+APP_DIRS = _resolve_app_dirs("TRINKER")
 
 # ---------------------------------------------------------------------------
 # Key file paths
@@ -61,10 +84,30 @@ for _d in (DATA_DIR, LOG_DIR, CACHE_DIR, BO_DIR, EXPORT_DIR):
 # AoE2 replay default locations (Windows-first, checked in order)
 # ---------------------------------------------------------------------------
 
-AO2_REPLAY_DIRS: list[Path] = [
-    Path.home() / "Documents" / "My Games" / "Age of Empires 2 DE",
-    Path.home() / "Games" / "Age of Empires 2 DE",
-]
+AO2_REPLAY_DIRS: list[Path] = []
+if sys.platform == "win32":
+    AO2_REPLAY_DIRS = [
+        Path.home() / "Documents" / "My Games" / "Age of Empires 2 DE",
+        Path.home() / "Games" / "Age of Empires 2 DE",
+    ]
+elif sys.platform == "darwin":
+    AO2_REPLAY_DIRS = [
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "Steam"
+        / "steamapps"
+        / "common"
+        / "AoE2DE"
+        / "savegame",
+        Path.home() / "Documents" / "My Games" / "Age of Empires 2 DE",
+    ]
+else:
+    # Linux — Steam Proton / native paths vary; users often set replay_dirs in Settings
+    AO2_REPLAY_DIRS = [
+        Path.home() / ".steam" / "steam" / "steamapps" / "compatdata" / "813780" / "pfx",
+        Path.home() / "Games" / "aoe2de",
+    ]
 
 # ---------------------------------------------------------------------------
 # External data sources

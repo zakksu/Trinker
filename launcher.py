@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.core.config import get_app_version
+from src.core.config import DATA_DIR, get_app_version
 
 LAUNCHER_STYLE = """
 QWidget {
@@ -177,10 +177,16 @@ class TrinkerLauncher(QWidget):
         self.btn_start.clicked.connect(self._on_start)
         layout.addWidget(self.btn_start, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        hint = QLabel("Updates + dependencies handled automatically")
+        hint = QLabel(f"Data: {DATA_DIR}")
         hint.setStyleSheet("color: #3a5a7a; font-size: 10px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setWordWrap(True)
         layout.addWidget(hint)
+
+        sub_hint = QLabel("Updates + dependencies handled automatically")
+        sub_hint.setStyleSheet("color: #3a5a7a; font-size: 10px;")
+        sub_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(sub_hint)
 
         self._thread = None
         self._worker = None

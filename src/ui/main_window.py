@@ -21,17 +21,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..analytics.session import get_practice_streak
 from ..build_orders.models import BuildOrder
 from ..core.config import get_app_version, settings
 from ..core.logger import logger
 from .analytics_tab import AnalyticsTab
 from .dashboard_tab import DashboardTab
 from .library_tab import LibraryTab
+from .medieval.icons import Icon
 from .notifications import ToastHost, set_toast_host, show_toast
 from .overlay import BuildOrderOverlay
 from .quick_start_tab import QuickStartTab
 from .settings_tab import SettingsTab
-from .medieval.icons import Icon
 from .theme import (
     apply_main_window,
     get_tokens,
@@ -68,8 +69,13 @@ class HeaderBar(QFrame):
 
         self.btn_overlay = QPushButton(f"{Icon.OVERLAY} Show Overlay")
         self.btn_overlay.setCheckable(True)
+        self.btn_overlay.setToolTip("Toggle the in-game build order overlay (customize hotkey in Settings)")
         self.btn_overlay.toggled.connect(self.overlay_toggled.emit)
         layout.addWidget(self.btn_overlay)
+
+        self.lbl_streak = QLabel("")
+        self.lbl_streak.setToolTip("Consecutive days with at least one saved game")
+        layout.addWidget(self.lbl_streak)
 
         self._version_lbl = QLabel(f"v{get_app_version()}")
         layout.addWidget(self._version_lbl)
@@ -87,7 +93,21 @@ class HeaderBar(QFrame):
             )
         if self._version_lbl:
             self._version_lbl.setStyleSheet(f"color: {t.text_muted}; font-size: 10px;")
+        if self.lbl_streak:
+            self.lbl_streak.setStyleSheet(
+                f"color: {t.success if t.medieval else t.accent}; "
+                f"font-size: 10px; font-weight: bold; padding: 0 8px;"
+            )
         self.btn_overlay.setStyleSheet(stylesheet_overlay_toggle(t))
+        self.refresh_streak()
+
+    def refresh_streak(self) -> None:
+        streak = get_practice_streak()
+        current = streak.get("current", 0)
+        if current > 0:
+            self.lbl_streak.setText(f"🔥 {current}d streak")
+        else:
+            self.lbl_streak.setText("")
 
 
 class TrinkerMainWindow(QMainWindow):
@@ -340,6 +360,7 @@ class TrinkerMainWindow(QMainWindow):
             return
         self.analytics_tab.refresh()
         self.dashboard_tab.refresh()
+        self.header.refresh_streak()
         show_toast(result.message, "success")
         self.status_bar.showMessage(result.message)
         if settings.auto_postgame_coach and settings.ai_coach_enabled:
@@ -404,6 +425,7 @@ class TrinkerMainWindow(QMainWindow):
             self.quick_start_tab.refresh()
         elif index == 1:
             self.dashboard_tab.refresh()
+            self.header.refresh_streak()
         elif index == 2:
             self.library_tab.refresh()
         elif index == 3:
@@ -444,11 +466,13 @@ class TrinkerMainWindow(QMainWindow):
         if result.imported:
             self.analytics_tab.refresh()
             self.dashboard_tab.refresh()
+            self.header.refresh_streak()
             self.tabs.setCurrentIndex(1)
             self.status_bar.showMessage(result.message)
         elif get_latest_replay():
             self.tabs.setCurrentIndex(1)
             self.dashboard_tab.refresh()
+            self.header.refresh_streak()
             self.status_bar.showMessage(
                 "Latest game already saved — check Analytics for history and coach tips."
             )

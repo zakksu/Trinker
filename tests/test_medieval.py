@@ -35,3 +35,11 @@ def test_stat_card_stylesheet():
 def test_icon_vocabulary():
     assert Icon.FOOD
     assert Icon.status_glyph("green") == Icon.ON_PACE
+
+
+def test_badge_chip_import():
+    from src.ui.medieval.widgets import ActivityHeatmap, BadgeChip, CompareDiffTable
+
+    assert BadgeChip
+    assert ActivityHeatmap
+    assert CompareDiffTable

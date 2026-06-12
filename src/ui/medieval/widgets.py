@@ -4,8 +4,10 @@ Reusable medieval-styled widgets for Dashboard and tabs.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from .animations import pulse_once
 from .palette import get_palette
@@ -197,3 +199,125 @@ class Timeline(QWidget):
         item = TimelineItem(icon, title, subtitle, accent, self)
         self._layout.addWidget(item)
         return item
+
+
+class BadgeChip(QLabel):
+    """Small achievement pill for header / dashboard."""
+
+    def __init__(self, label: str, parent=None):
+        super().__init__(label, parent)
+        p = get_palette()
+        self.setStyleSheet(
+            f"color: {p.gold_bright}; background: rgba(201,162,39,0.14); "
+            f"border: 1px solid {p.gold_dim}; border-radius: 10px; "
+            f"padding: 4px 10px; font-size: 10px; font-weight: bold; letter-spacing: 0.5px;"
+        )
+
+
+class ActivityHeatmap(QWidget):
+    """GitHub-style text heatmap of practice days."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._lbl = QLabel("No practice data yet.")
+        self._lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._lbl.setWordWrap(True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._lbl)
+
+    def set_data(self, data: dict[str, int], accent: str | None = None) -> None:
+        p = get_palette()
+        color = accent or p.gold
+        if not data:
+            self._lbl.setText("No practice data yet — play with the overlay on.")
+            self._lbl.setStyleSheet(f"color: {p.ink_dim}; font-size: 12px;")
+            return
+
+        today = date.today()
+        lines = []
+        for week_offset in range(16, -1, -1):
+            week_start = today - timedelta(days=today.weekday()) - timedelta(weeks=week_offset)
+            week_str = ""
+            for d in range(7):
+                day = week_start + timedelta(days=d)
+                cnt = data.get(day.isoformat(), 0)
+                if cnt == 0:
+                    char = "░"
+                elif cnt == 1:
+                    char = "▒"
+                elif cnt <= 3:
+                    char = "▓"
+                else:
+                    char = "█"
+                week_str += char
+            lines.append(week_str)
+
+        heatmap_text = "  ".join(lines)
+        self._lbl.setText(
+            f"<pre style='color: {color}; font-size: 13px; letter-spacing: 2px;'>{heatmap_text}</pre>"
+        )
+        self._lbl.setTextFormat(Qt.TextFormat.RichText)
+
+
+class CompareDiffTable(QFrame):
+    """Side-by-side target vs actual timing comparison."""
+
+    _STATUS_COLORS = {
+        "green": "#6aab55",
+        "yellow": "#d4a017",
+        "red": "#b54a4a",
+        "neutral": "#7a6f5c",
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        p = get_palette()
+        self.setStyleSheet(
+            "QFrame { background: rgba(30,24,18,0.45); border-radius: 8px; padding: 4px; }"
+        )
+        self._grid = QGridLayout(self)
+        self._grid.setContentsMargins(8, 8, 8, 8)
+        self._grid.setSpacing(6)
+        for col, title in enumerate(["Milestone", "Target", "Actual", "Status"]):
+            hdr = QLabel(title.upper())
+            hdr.setStyleSheet(
+                f"color: {p.ink_muted}; font-size: 9px; font-weight: bold; letter-spacing: 1px;"
+            )
+            self._grid.addWidget(hdr, 0, col)
+
+    def clear_rows(self) -> None:
+        while self._grid.count() > 4:
+            item = self._grid.takeAt(4)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+    def set_rows(self, rows: list) -> None:
+        """Populate from analytics.compare.CompareRow objects."""
+        from .icons import Icon
+
+        self.clear_rows()
+        p = get_palette()
+        if not rows:
+            empty = QLabel("No timing data to compare yet.")
+            empty.setStyleSheet(f"color: {p.ink_dim}; font-size: 11px;")
+            self._grid.addWidget(empty, 1, 0, 1, 4)
+            return
+
+        for r_idx, row in enumerate(rows, start=1):
+            accent = self._STATUS_COLORS.get(row.status, self._STATUS_COLORS["neutral"])
+            cells = [
+                row.label,
+                row.target,
+                row.actual,
+                f"{Icon.status_glyph(row.status)} {row.detail or row.status}",
+            ]
+            for c_idx, text in enumerate(cells):
+                lbl = QLabel(text)
+                lbl.setWordWrap(True)
+                style = f"color: {p.ink if c_idx < 3 else accent}; font-size: 11px;"
+                if c_idx == 0:
+                    style += " font-weight: bold;"
+                lbl.setStyleSheet(style)
+                self._grid.addWidget(lbl, r_idx, c_idx)

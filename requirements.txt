@@ -3,6 +3,7 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 matplotlib>=3.8.0
 mgz>=1.8.26
+platformdirs>=4.0.0
 # When DE patches break pip mgz, upgrade from GitHub:
 # pip install git+https://github.com/happyleavesaoc/aoc-mgz.git
 

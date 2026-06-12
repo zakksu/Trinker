@@ -31,6 +31,7 @@ from ..build_orders.models import BuildOrder, BuildStep
 from ..build_orders.step_timer import compute_step_timing
 from ..core.config import settings
 from ..core.logger import logger
+from .medieval.animations import fade_in, pulse_once
 from .medieval.icons import Icon
 from .medieval.palette import get_palette, use_medieval_style
 from .medieval.styles import overlay_container_stylesheet, overlay_tab_stylesheet
@@ -68,7 +69,7 @@ class StepTimingBar(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
 
-        self.lbl_timing = QLabel("Step timer")
+        self.lbl_timing = QLabel(f"{Icon.TIMER} Step timer")
         self.lbl_timing.setStyleSheet(f"color: {DIM_COLOR}; font-size: 10px;")
         layout.addWidget(self.lbl_timing)
 
@@ -76,12 +77,18 @@ class StepTimingBar(QFrame):
         self.bar.setRange(0, 100)
         self.bar.setValue(0)
         self.bar.setTextVisible(False)
-        self.bar.setFixedHeight(10)
-        self.bar.setStyleSheet("""
-            QProgressBar { background: #1a1a20; border: 1px solid #2c2c2e; border-radius: 4px; }
-            QProgressBar::chunk { background: #3498db; border-radius: 3px; }
-        """)
+        self.bar.setFixedHeight(12)
+        self._bar_idle = f"""
+            QProgressBar {{ background: #1a1a20; border: 1px solid #2c2c2e; border-radius: 4px; }}
+            QProgressBar::chunk {{ background: {ACCENT}; border-radius: 3px; }}
+        """
+        self.bar.setStyleSheet(self._bar_idle)
         layout.addWidget(self.bar)
+
+    def set_step_icon(self, icon: str) -> None:
+        text = self.lbl_timing.text().split(" ", 1)
+        suffix = text[1] if len(text) > 1 else "Step timer"
+        self.lbl_timing.setText(f"{icon} {suffix}")
 
     def update_timing(self, progress: float, status: str, message: str) -> None:
         color = STATUS_COLORS.get(status, STATUS_COLORS["neutral"])
@@ -112,11 +119,11 @@ class ResourcePanel(QFrame):
 
         self._cells: dict[str, QLabel] = {}
         specs = [
-            ("pop", "POP", "#e67e22", 0, 0),
-            ("food", "FOOD", "#2ecc71", 0, 1),
-            ("wood", "WOOD", "#d4a574", 1, 0),
-            ("gold", "GOLD", "#f1c40f", 1, 1),
-            ("stone", "STONE", "#95a5a6", 2, 0),
+            ("pop", f"{Icon.POP} POP", "#e67e22", 0, 0),
+            ("food", f"{Icon.FOOD} FOOD", "#2ecc71", 0, 1),
+            ("wood", f"{Icon.WOOD} WOOD", "#d4a574", 1, 0),
+            ("gold", f"{Icon.GOLD} GOLD", "#f1c40f", 1, 1),
+            ("stone", f"{Icon.STONE} STONE", "#95a5a6", 2, 0),
         ]
         for key, title, color, row, col in specs:
             box = QVBoxLayout()
@@ -331,6 +338,7 @@ class BuildOrderOverlay(QWidget):
         self._last_screen_hash: Optional[int] = None
         self._elapsed_sec = 0
         self._drag_start: Optional[QPoint] = None
+        self._hotkeys_visible = False
 
         self._tick = QTimer(self)
         self._tick.setInterval(1000)
@@ -476,6 +484,15 @@ class BuildOrderOverlay(QWidget):
 
         inner.addWidget(self.tabs)
 
+        self.lbl_hotkeys = QLabel("")
+        self.lbl_hotkeys.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_hotkeys.setStyleSheet(
+            f"color: {DIM_COLOR}; font-size: 9px; padding: 4px 2px 2px 2px; "
+            f"background: rgba(0,0,0,0.15); border-radius: 4px;"
+        )
+        self._refresh_hotkey_hint()
+        inner.addWidget(self.lbl_hotkeys)
+
         grip_row = QHBoxLayout()
         grip_row.addStretch()
         grip = QSizeGrip(self)
@@ -503,6 +520,20 @@ class BuildOrderOverlay(QWidget):
             QPushButton:hover {{ background: {_rgba(color, 0.25)}; }}
         """)
         return btn
+
+    def _refresh_hotkey_hint(self) -> None:
+        hk_next = settings.hotkey_next_step.replace("Ctrl+", "⌃")
+        hk_prev = settings.hotkey_prev_step.replace("Ctrl+", "⌃")
+        hk_toggle = settings.hotkey_toggle_overlay.replace("Ctrl+", "⌃").replace("Shift+", "⇧")
+        self.lbl_hotkeys.setText(
+            f"{Icon.OVERLAY} {hk_prev} prev · {hk_next} next · {hk_toggle} hide"
+        )
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._hotkeys_visible and self.lbl_hotkeys:
+            self._hotkeys_visible = True
+            fade_in(self.lbl_hotkeys, duration_ms=350)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -600,6 +631,7 @@ class BuildOrderOverlay(QWidget):
         if self._build_order and self._current_index < len(self._build_order.steps) - 1:
             self._current_index += 1
             self._refresh_steps()
+            pulse_once(self.current_card)
             self.step_changed.emit(self._current_index)
 
     def prev_step(self) -> None:
@@ -678,6 +710,18 @@ class BuildOrderOverlay(QWidget):
         self.current_card.set_step(current, label="NOW")
         self.next_banner.set_step(nxt)
         self.resource_panel.set_step(current)
+        if current and current.age:
+            age_icons = {
+                "feudal": Icon.FEUDAL,
+                "castle": Icon.CASTLE,
+                "imperial": Icon.IMPERIAL,
+                "dark": Icon.DARK,
+            }
+            self.step_timing_bar.set_step_icon(age_icons.get(current.age.lower(), Icon.TIMER))
+        elif current and current.population:
+            self.step_timing_bar.set_step_icon(Icon.POP)
+        else:
+            self.step_timing_bar.set_step_icon(Icon.TIMER)
         if current and current.notes:
             self.lbl_tip.setText(current.notes)
         self.lbl_progress.setText(f"{self._current_index + 1}/{total}")
