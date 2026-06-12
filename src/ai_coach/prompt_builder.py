@@ -66,11 +66,13 @@ Analyze this game and give your coaching report."""
         mistakes_str = "\n".join(f"  - {m}" for m in top_mistakes[:5]) if top_mistakes else "  None"
         feudal = stats.get("avg_feudal_sec")
         castle = stats.get("avg_castle_sec")
+        wr = stats.get("win_rate")
+        wr_str = f"{wr:.1f}%" if wr is not None else "N/A (practice)"
         return f"""You are an AoE2 coaching AI. Based on this player's stats, recommend 2-3 build orders to practice.
 
 Stats:
 - Sessions: {stats.get('total_sessions', 0)}
-- Win rate: {stats.get('win_rate', 0):.1f}%
+- Win rate: {wr_str}
 - Avg Feudal: {_mmss(feudal)}
 - Avg Castle: {_mmss(castle)}
 - Best Feudal: {_mmss(stats.get('best_feudal_sec'))}

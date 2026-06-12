@@ -99,6 +99,27 @@ def get_latest_replay_analysis() -> Optional[StoredReplayAnalysis]:
     return _row_to_analysis(row) if row else None
 
 
+def get_replay_feudal_trend(last_n: int = 30) -> list[dict]:
+    """Feudal times from saved replay analyses (fallback when sessions lack timings)."""
+    trend: list[dict] = []
+    for row in reversed(get_replay_analyses(last_n)):
+        try:
+            data = json.loads(row.profile_json)
+        except Exception:
+            continue
+        feudal = data.get("feudal_time_sec")
+        if feudal is None:
+            continue
+        trend.append(
+            {
+                "session_id": row.id,
+                "date": (row.analyzed_at or "")[:10],
+                "feudal_time_sec": feudal,
+            }
+        )
+    return trend
+
+
 def get_replay_analyses(limit: int = 20) -> list[StoredReplayAnalysis]:
     with db_conn() as conn:
         rows = conn.execute(

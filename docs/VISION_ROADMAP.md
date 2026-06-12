@@ -1,6 +1,6 @@
 # TRINKER — Path to 100% Platform Vision
 
-Current estimate: **~58%** of full vision (after v3.1).  
+Current estimate: **~65%** of full vision (after v3.2 Performance Hub).  
 Target: **100%** = one-click launcher + trusted data + closed training loop + distribution + discoverability.
 
 ---
@@ -24,10 +24,12 @@ Target: **100%** = one-click launcher + trusted data + closed training loop + di
 | Item | Status |
 |------|--------|
 | mgz parser with quality labels | partial |
+| Replay engine v2 (multi-source merge) | ✅ |
+| Pro benchmark DB (32 rows + JSON import) | ✅ |
 | DE v101 replay corpus in CI | partial |
 | Remote corpus download URLs | infra only |
 | Event-level timing reconstruction | not started |
-| Clear “low quality” UX in Dashboard | partial |
+| Clear “low quality” UX in Dashboard | ✅ Performance Hub |
 
 ---
 
@@ -60,6 +62,7 @@ Target: **100%** = one-click launcher + trusted data + closed training loop + di
 | Item | Status |
 |------|--------|
 | Ollama setup + RAG (5 guides) | ✅ |
+| SETUP_AI.bat + launcher prompt | ✅ |
 | Offline UX | ✅ |
 | Embeddings RAG | not started |
 | Signed TRINKER.exe releases | not started |

@@ -80,7 +80,17 @@ def timeline_item_stylesheet(p: MedievalPalette, accent: str) -> str:
 
 
 def section_header_stylesheet(p: MedievalPalette) -> str:
+    """Steam artwork-inspired banner strip behind section titles."""
     return f"""
+        QWidget#SectionHeader {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 {p.parchment_dark}, stop:0.35 {p.wood_dark},
+                stop:0.65 {p.parchment}, stop:1 {p.parchment_dark});
+            border: 1px solid {p.wood_frame};
+            border-left: 4px solid {p.gold};
+            border-radius: 8px;
+            padding: 4px;
+        }}
         QLabel#SectionTitle {{
             color: {p.gold_bright};
             font-size: 26px;
@@ -94,6 +104,45 @@ def section_header_stylesheet(p: MedievalPalette) -> str:
         QLabel#SectionIcon {{
             color: {p.gold};
             font-size: 28px;
+        }}
+    """
+
+
+def dialog_stylesheet(p: MedievalPalette) -> str:
+    return f"""
+        QDialog {{
+            background: {p.wood_dark};
+            border: 2px solid {p.wood_frame};
+        }}
+        QLabel {{
+            color: {p.ink};
+            font-size: 12px;
+        }}
+        QCheckBox {{
+            color: {p.gold_bright};
+            font-size: 12px;
+            spacing: 8px;
+        }}
+        QCheckBox::indicator {{
+            width: 16px;
+            height: 16px;
+            border: 1px solid {p.gold};
+            border-radius: 3px;
+            background: {p.parchment_dark};
+        }}
+        QCheckBox::indicator:checked {{
+            background: {p.gold};
+        }}
+        QDialogButtonBox QPushButton {{
+            background: {p.parchment_dark};
+            color: {p.gold_bright};
+            border: 1px solid {p.wood_frame};
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-weight: bold;
+        }}
+        QDialogButtonBox QPushButton:hover {{
+            background: {p.wood_frame};
         }}
     """
 

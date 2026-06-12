@@ -47,12 +47,22 @@ def main() -> int:
         default=getattr(settings, "recommended_ollama_model", "llama3.2"),
         help="Model to pull (default from settings)",
     )
+    parser.add_argument(
+        "--open-installer",
+        action="store_true",
+        help="Open ollama.ai download page if Ollama is not installed",
+    )
     args = parser.parse_args()
 
     _print_header()
 
     if not shutil.which("ollama"):
         _install_hint()
+        if args.open_installer:
+            import webbrowser
+
+            webbrowser.open("https://ollama.ai/download")
+            print("Opened https://ollama.ai/download in your browser.")
         return 1
 
     print(f"Ollama CLI found: {shutil.which('ollama')}")

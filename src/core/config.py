@@ -178,8 +178,21 @@ class AppSettings:
     auto_postgame_coach: bool = True  # run AI coach after new replay import
     overlay_coach_alert: str = ""  # pinned reminder for next overlay session
     overlay_coach_alert_bo_id: Optional[int] = None
-    ocr_capture_enabled: bool = False  # optional live OCR (mss + easyocr)
+    dashboard_kpis: list[str] = field(
+        default_factory=lambda: [
+            "sessions",
+            "feudal",
+            "quality",
+            "winrate",
+            "streak",
+            "accuracy",
+        ]
+    )
+    dashboard_show_charts: bool = True
+    dashboard_show_patterns: bool = True
+    ollama_setup_dismissed: bool = False
     overlay_profile_enabled: bool = False  # log slow overlay ticks (dev)
+    ocr_capture_enabled: bool = False  # live resource OCR on overlay
     ocr_resource_region: dict = field(
         default_factory=lambda: {"left": 0, "top": 0, "width": 220, "height": 48}
     )

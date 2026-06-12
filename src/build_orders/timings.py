@@ -145,7 +145,7 @@ def evaluate_feudal_time(
         msg = f"On pace! ({_sec_to_mmss(actual_sec)} vs target {benchmark.feudal_range_str()})"
     elif actual_sec <= max_b * GREEN_THRESHOLD:
         status = "green"
-        msg = f"Slightly early — great! {_sec_to_mmss(actual_sec)}"
+        msg = f"Slightly late but OK (+{diff}s) — {_sec_to_mmss(actual_sec)} vs {benchmark.feudal_range_str()}"
     elif actual_sec <= max_b * YELLOW_THRESHOLD:
         status = "yellow"
         msg = f"+{diff}s behind pace ({_sec_to_mmss(actual_sec)} vs {benchmark.feudal_range_str()})"

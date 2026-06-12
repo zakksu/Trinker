@@ -8,8 +8,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, QThread, Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -22,14 +26,27 @@ from PySide6.QtWidgets import (
 )
 
 from ..ai_coach.chat import ask_coach, build_summary_from_latest_replay, get_coach_messages
+from ..analytics.charts import (
+    charts_available,
+    render_accuracy_trend,
+    render_feudal_trend,
+    render_win_rate_bar,
+)
+from ..analytics.history import build_historical_summary, get_recurring_themes
 from ..analytics.compare import compare_to_build_order
-from ..analytics.replay_store import get_latest_replay_analysis, get_replay_analyses
 from ..analytics.session import (
     get_activity_heatmap,
+    get_accuracy_trend,
+    get_feudal_time_trend,
     get_practice_streak,
     get_sessions,
     get_summary_stats,
     get_training_badges,
+)
+from ..analytics.replay_store import (
+    get_latest_replay_analysis,
+    get_replay_analyses,
+    get_replay_feudal_trend,
 )
 from ..core.config import settings
 from ..integrations.aoe2gg import get_stored_matches, import_recent_matches, profile_url_for
@@ -37,6 +54,7 @@ from ..training.drill_engine import pin_drill, suggest_drill
 from .medieval.animations import stagger_fade_in
 from .medieval.icons import Icon
 from .medieval.palette import get_palette
+from .medieval.styles import dialog_stylesheet
 from .medieval.widgets import (
     ActivityHeatmap,
     BadgeChip,
@@ -54,6 +72,58 @@ _STATUS_ACCENTS = {
     "red": "#b54a4a",
     "neutral": "#7a6f5c",
 }
+
+_KPI_OPTIONS: list[tuple[str, str]] = [
+    ("sessions", "Games Saved"),
+    ("feudal", "Avg Feudal"),
+    ("quality", "Last Quality"),
+    ("winrate", "Win Rate"),
+    ("streak", "Day Streak"),
+    ("accuracy", "Avg Accuracy"),
+]
+
+
+def _sanitize_coach_alert(alert: str) -> str:
+    """Drop stale Ollama connection nags from pinned overlay alerts."""
+    text = (alert or "").strip()
+    if not text:
+        return ""
+    low = text.lower()
+    if "ollama" in low and any(x in low for x in ("settings", "connection", "check trinker")):
+        return ""
+    return text
+
+
+class _KpiCustomizeDialog(QDialog):
+    """Pick which KPI stat cards appear on the Performance Hub."""
+
+    def __init__(self, selected: list[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Customize KPI Cards")
+        p = get_palette()
+        self.setStyleSheet(dialog_stylesheet(p))
+        self.setMinimumWidth(360)
+        self._checks: dict[str, QCheckBox] = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 16)
+        layout.setSpacing(10)
+        title = QLabel("Choose stats for your Performance Hub banner:")
+        title.setStyleSheet(f"color: {p.gold_bright}; font-weight: bold; font-size: 13px;")
+        layout.addWidget(title)
+        for key, label in _KPI_OPTIONS:
+            cb = QCheckBox(label)
+            cb.setChecked(key in selected)
+            self._checks[key] = cb
+            layout.addWidget(cb)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def selected_keys(self) -> list[str]:
+        return [k for k, cb in self._checks.items() if cb.isChecked()]
 
 
 def _fmt_sec(sec) -> str:
@@ -110,11 +180,18 @@ class DashboardTab(QWidget):
         layout.setSpacing(18)
 
         self._header = SectionHeader(
-            "Command Center",
-            "Your training snapshot — updates after each game.",
+            "Performance Hub",
+            "Your command center — KPIs, trends, patterns, and next-game focus.",
             Icon.DASHBOARD,
         )
         layout.addWidget(self._header)
+
+        kpi_toolbar = QHBoxLayout()
+        kpi_toolbar.addStretch()
+        self.btn_customize_kpis = QPushButton(f"{Icon.SETTINGS} Customize KPIs")
+        self.btn_customize_kpis.clicked.connect(self._customize_kpis)
+        kpi_toolbar.addWidget(self.btn_customize_kpis)
+        layout.addLayout(kpi_toolbar)
 
         cards = QHBoxLayout()
         cards.setSpacing(12)
@@ -124,16 +201,20 @@ class DashboardTab(QWidget):
         self.card_quality = StatCard(Icon.QUALITY, "Last Quality", "—", p.success)
         self.card_winrate = StatCard(Icon.LADDER, "Win Rate", "—", p.gold_bright)
         self.card_streak = StatCard(Icon.REFRESH, "Day Streak", "0", p.success)
-        self._stat_cards = [
-            self.card_sessions,
-            self.card_feudal,
-            self.card_quality,
-            self.card_winrate,
-            self.card_streak,
-        ]
+        self.card_accuracy = StatCard(Icon.ANALYTICS, "Avg Accuracy", "—", p.gold_dim)
+        self._kpi_cards: dict[str, StatCard] = {
+            "sessions": self.card_sessions,
+            "feudal": self.card_feudal,
+            "quality": self.card_quality,
+            "winrate": self.card_winrate,
+            "streak": self.card_streak,
+            "accuracy": self.card_accuracy,
+        }
+        self._stat_cards = list(self._kpi_cards.values())
         for c in self._stat_cards:
             cards.addWidget(c)
         layout.addLayout(cards)
+        self._apply_kpi_visibility()
 
         self._badges_row = QHBoxLayout()
         self._badges_row.setSpacing(8)
@@ -148,6 +229,46 @@ class DashboardTab(QWidget):
         self.panel_activity.add_widget(self.activity_heatmap)
         heat_row.addWidget(self.panel_activity, 1)
         layout.addLayout(heat_row)
+
+        if settings.dashboard_show_charts:
+            self.panel_charts = MedievalPanel("Trend Charts", Icon.ANALYTICS)
+            charts_row = QHBoxLayout()
+            self.lbl_feudal_chart = QLabel("Play more games to see feudal trends.")
+            self.lbl_feudal_chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.lbl_accuracy_chart = QLabel("")
+            self.lbl_accuracy_chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.lbl_results_chart = QLabel("")
+            self.lbl_results_chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            for lbl in (self.lbl_feudal_chart, self.lbl_accuracy_chart, self.lbl_results_chart):
+                lbl.setMinimumHeight(120)
+                lbl.setWordWrap(True)
+            charts_row.addWidget(self.lbl_feudal_chart, 1)
+            charts_row.addWidget(self.lbl_accuracy_chart, 1)
+            charts_row.addWidget(self.lbl_results_chart, 1)
+            self.panel_charts.add_layout(charts_row)
+            if not charts_available():
+                hint = QLabel("Install matplotlib for trend charts (pip install matplotlib).")
+                hint.setWordWrap(True)
+                hint.setStyleSheet(f"color: {p.ink_dim}; font-size: 11px;")
+                self.panel_charts.add_widget(hint)
+            layout.addWidget(self.panel_charts)
+        else:
+            self.panel_charts = None
+
+        if settings.dashboard_show_patterns:
+            self.panel_patterns = MedievalPanel("Historical Patterns", Icon.LIBRARY)
+            self.lbl_themes = QLabel("—")
+            self.lbl_themes.setWordWrap(True)
+            self.lbl_themes.setStyleSheet(f"color: {p.gold_bright}; font-size: 12px; font-weight: bold;")
+            self.panel_patterns.add_widget(self.lbl_themes)
+            self.hist_output = QTextEdit()
+            self.hist_output.setReadOnly(True)
+            self.hist_output.setMaximumHeight(140)
+            self.hist_output.setPlaceholderText("Historical analysis appears after a few saved sessions…")
+            self.panel_patterns.add_widget(self.hist_output)
+            layout.addWidget(self.panel_patterns)
+        else:
+            self.panel_patterns = None
 
         self.panel_last = MedievalPanel("Last Game", Icon.GAME)
         self.lbl_last_game = QLabel("No games detected yet — play with the overlay on.")
@@ -246,6 +367,76 @@ class DashboardTab(QWidget):
         root.addWidget(scroll)
 
         stagger_fade_in(self._stat_cards, delay_ms=50)
+
+    def _apply_kpi_visibility(self) -> None:
+        selected = settings.dashboard_kpis or [k for k, _ in _KPI_OPTIONS]
+        for key, card in self._kpi_cards.items():
+            card.setVisible(key in selected)
+
+    def _customize_kpis(self) -> None:
+        selected = settings.dashboard_kpis or [k for k, _ in _KPI_OPTIONS]
+        dlg = _KpiCustomizeDialog(selected, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        picked = dlg.selected_keys()
+        if not picked:
+            picked = ["sessions", "feudal", "quality"]
+        settings.dashboard_kpis = picked
+        settings.save()
+        self._apply_kpi_visibility()
+
+    def _render_performance_charts(self, stats: dict) -> None:
+        if not getattr(self, "panel_charts", None):
+            return
+        feudal_trend = get_feudal_time_trend(last_n=20)
+        if not feudal_trend:
+            feudal_trend = get_replay_feudal_trend(last_n=20)
+        acc_trend = get_accuracy_trend(last_n=20)
+        pix_f = render_feudal_trend(feudal_trend) if feudal_trend else None
+        pix_a = render_accuracy_trend(acc_trend) if acc_trend else None
+        breakdown: dict[str, int] = {}
+        for key, label in (
+            ("wins", "win"),
+            ("losses", "loss"),
+            ("draws", "draw"),
+            ("practice_sessions", "practice"),
+        ):
+            val = stats.get(key) or 0
+            if val:
+                breakdown[label] = int(val)
+        pix_r = render_win_rate_bar(breakdown) if breakdown else None
+
+        def _set(lbl: QLabel, pix, empty: str) -> None:
+            if pix and not pix.isNull():
+                lbl.setPixmap(pix.scaledToWidth(280, Qt.TransformationMode.SmoothTransformation))
+                lbl.setText("")
+            else:
+                lbl.setPixmap(QPixmap())
+                lbl.setText(empty)
+
+        _set(self.lbl_feudal_chart, pix_f, "Feudal trend — play more ranked/practice games.")
+        _set(self.lbl_accuracy_chart, pix_a, "Accuracy trend — finish overlay sessions.")
+        _set(self.lbl_results_chart, pix_r, "Results breakdown — wins tracked from replays.")
+
+    def _render_patterns(self) -> None:
+        if not getattr(self, "panel_patterns", None):
+            return
+        themes = get_recurring_themes()
+        if themes:
+            self.lbl_themes.setText(
+                "  ·  ".join(f"{t} ({c})" for t, c in themes[:8])
+            )
+        else:
+            self.lbl_themes.setText("No recurring themes yet — add notes when saving sessions.")
+        bo_id = settings.last_practice_bo_id
+        civ = "Any"
+        if bo_id:
+            from ..build_orders.manager import get_build_order
+
+            bo = get_build_order(bo_id)
+            if bo:
+                civ = bo.civ
+        self.hist_output.setPlainText(build_historical_summary(civ, bo_id))
 
     def _render_compare(self, feudal, castle, imperial) -> None:
         cmp = compare_to_build_order(
@@ -430,11 +621,23 @@ class DashboardTab(QWidget):
         self.card_sessions.set_value(str(stats.get("total_sessions", 0)))
         feudal = stats.get("avg_feudal_sec")
         self.card_feudal.set_value(_fmt_sec(feudal) if feudal else "—")
-        self.card_winrate.set_value(f"{stats.get('win_rate', 0):.1f}%")
+        self.card_winrate.set_value(
+            f"{stats['win_rate']:.1f}%" if stats.get("win_rate") is not None else "—"
+        )
+        acc = stats.get("avg_accuracy")
+        self.card_accuracy.set_value(f"{acc:.1f}%" if acc is not None else "—")
         streak = get_practice_streak()
         self.card_streak.set_value(str(streak.get("current", 0)))
         self._render_badges()
         self.activity_heatmap.set_data(get_activity_heatmap())
+        self._render_performance_charts(stats)
+        self._render_patterns()
+
+        stale = _sanitize_coach_alert(settings.overlay_coach_alert)
+        if settings.overlay_coach_alert and not stale:
+            settings.overlay_coach_alert = ""
+            settings.overlay_coach_alert_bo_id = None
+            settings.save()
 
         latest = get_latest_replay_analysis()
         feudal_sec = castle_sec = imperial_sec = None
@@ -474,8 +677,8 @@ class DashboardTab(QWidget):
             )
             self.lbl_coach_mode.setStyleSheet("color: #b8a88a; font-size: 11px;")
 
-        if settings.overlay_coach_alert:
-            self.lbl_coach.setText(f"{Icon.COACH}  {settings.overlay_coach_alert}")
+        if stale:
+            self.lbl_coach.setText(f"{Icon.COACH}  {stale}")
         else:
             self.lbl_coach.setText(
                 "Play a game — coach tips appear here after auto-analysis."

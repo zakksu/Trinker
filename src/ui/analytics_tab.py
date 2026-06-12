@@ -186,6 +186,17 @@ class AnalyticsTab(QWidget):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
 
+        hub_note = QLabel(
+            "📊 KPI trends and historical patterns live on Dashboard → Performance Hub.\n"
+            "Use Analytics here for session tables, exports, and deep history."
+        )
+        hub_note.setWordWrap(True)
+        hub_note.setStyleSheet(
+            "color: #c9a227; background: rgba(201,162,39,0.08); "
+            "border-left: 3px solid #c9a227; padding: 10px; border-radius: 6px; font-size: 11px;"
+        )
+        root.addWidget(hub_note)
+
         # ── Top tabs ──────────────────────────────────────────────────────
         tabs = QTabWidget()
         tabs.addTab(self._build_overview_tab(), "Overview")
@@ -476,7 +487,9 @@ class AnalyticsTab(QWidget):
         stats = get_summary_stats(bo_id)
 
         self.card_sessions.set_value(str(stats.get("total_sessions", 0)))
-        self.card_winrate.set_value(f"{stats.get('win_rate', 0):.1f}%")
+        self.card_winrate.set_value(
+            f"{stats['win_rate']:.1f}%" if stats.get("win_rate") is not None else "—"
+        )
         self.card_feudal.set_value(_sec_to_mmss(stats.get("avg_feudal_sec")))
         self.card_castle.set_value(_sec_to_mmss(stats.get("avg_castle_sec")))
         self.card_accuracy.set_value(_pct(stats.get("avg_accuracy")))

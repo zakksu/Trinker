@@ -251,7 +251,58 @@ class TrinkerLauncher(QWidget):
         from src.core.config import get_app_version
 
         self.lbl_version.setText(f"AoE2 TRAINING COMPANION  ·  v{get_app_version()}")
-        QTimer.singleShot(300, self._launch_app)
+        QTimer.singleShot(300, self._prompt_ollama_then_launch)
+
+    def _prompt_ollama_then_launch(self) -> None:
+        """Offer one-time AI setup if Ollama is missing."""
+        try:
+            from src.core.config import settings
+
+            if settings.ollama_setup_dismissed or not settings.ai_coach_enabled:
+                self._launch_app()
+                return
+            from src.ai_coach.coach import _is_ollama_available
+
+            if _is_ollama_available():
+                self._launch_app()
+                return
+        except Exception:
+            self._launch_app()
+            return
+
+        box = QMessageBox(self)
+        box.setWindowTitle("TRINKER AI Coach")
+        box.setText(
+            "Optional: set up the local AI coach (Ollama) for smarter post-game tips.\n\n"
+            "TRINKER works fully without it — offline tips are always available.\n\n"
+            "Run SETUP_AI.bat now?"
+        )
+        box.setStandardButtons(
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No
+            | QMessageBox.StandardButton.Cancel
+        )
+        box.setDefaultButton(QMessageBox.StandardButton.Yes)
+        choice = box.exec()
+
+        if choice == QMessageBox.StandardButton.Cancel:
+            self.close()
+            return
+        if choice == QMessageBox.StandardButton.Yes:
+            setup_bat = _ROOT / "SETUP_AI.bat"
+            if setup_bat.exists():
+                subprocess.Popen(["cmd", "/c", str(setup_bat)], cwd=_ROOT)
+            else:
+                subprocess.Popen(
+                    [sys.executable, str(_ROOT / "scripts" / "setup_ollama.py"), "--open-installer"],
+                    cwd=_ROOT,
+                )
+        else:
+            from src.core.config import settings
+
+            settings.ollama_setup_dismissed = True
+            settings.save()
+        self._launch_app()
 
     def _launch_app(self) -> None:
         subprocess.Popen([sys.executable, str(_ROOT / "main.py")], cwd=_ROOT)

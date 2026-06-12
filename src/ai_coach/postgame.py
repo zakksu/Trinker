@@ -148,9 +148,17 @@ def run_postgame_coach(
         )
     except Exception as exc:
         logger.warning("Post-game coach failed: %s", exc)
+        offline = _offline_coaching_tips(
+            analysis.feudal_time_sec,
+            analysis.castle_time_sec,
+            None,
+        )
+        alert = "Queue vills non-stop — never idle your TC"
+        if analysis.feudal_time_sec and analysis.feudal_time_sec > 600:
+            alert = "Click Feudal earlier — focus on clean Dark Age"
         return PostGameCoachResult(
-            report=f"AI coach error: {exc}\n\n{timeline}",
-            overlay_alert="Check TRINKER Settings → Ollama connection",
+            report=f"{offline}\n\n(AI unavailable — using offline tips.)",
+            overlay_alert=alert,
             used_ai=False,
             timeline=timeline,
             historical=historical,

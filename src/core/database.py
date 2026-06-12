@@ -199,6 +199,12 @@ def init_db() -> None:
         _ensure_online_matches(conn)
 
     _seed_ideal_timings()
+    try:
+        from ..build_orders.benchmark_import import import_pro_benchmarks
+
+        import_pro_benchmarks()
+    except Exception as exc:
+        logger.debug("Pro benchmark import skipped: %s", exc)
     logger.info("Database ready.")
 
 

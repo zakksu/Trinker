@@ -667,6 +667,13 @@ class BuildOrderOverlay(QWidget):
     def _show_coach_alert(self, bo: BuildOrder) -> None:
         """Display pinned post-game coaching alert if it matches this build."""
         alert = settings.overlay_coach_alert.strip()
+        low = alert.lower()
+        if alert and "ollama" in low and any(
+            x in low for x in ("settings", "connection", "check trinker")
+        ):
+            self.clear_coach_alert()
+            self.lbl_coach_alert.setVisible(False)
+            return
         bo_id = settings.overlay_coach_alert_bo_id
         if not alert:
             self.lbl_coach_alert.setVisible(False)

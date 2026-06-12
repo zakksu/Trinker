@@ -332,9 +332,13 @@ def get_summary_stats(build_order_id: Optional[int] = None) -> dict:
         ).fetchone()
 
     d = dict(row) if row else {}
-    d["win_rate"] = (
-        round(d["wins"] / d["total_sessions"] * 100, 1) if d.get("total_sessions") else 0.0
-    )
+    wins = int(d.get("wins") or 0)
+    losses = int(d.get("losses") or 0)
+    draws = int(d.get("draws") or 0)
+    total = int(d.get("total_sessions") or 0)
+    decided = wins + losses
+    d["win_rate"] = round(wins / decided * 100, 1) if decided > 0 else None
+    d["practice_sessions"] = max(0, total - wins - losses - draws)
     return d
 
 

@@ -75,6 +75,7 @@ class SectionHeader(QWidget):
 
     def __init__(self, title: str, subtitle: str = "", icon: str = "", parent=None):
         super().__init__(parent)
+        self.setObjectName("SectionHeader")
         p = get_palette()
         self.setStyleSheet(section_header_stylesheet(p))
 

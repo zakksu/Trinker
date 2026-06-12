@@ -123,10 +123,12 @@ def build_historical_summary(
     """
     stats = get_summary_stats(build_order_id)
     themes = get_recurring_themes()
+    wr = stats.get("win_rate")
+    wr_line = f"Win rate: {wr:.1f}%" if wr is not None else "Win rate: — (practice / SP focus)"
     lines = [
         f"=== Historical Practice Data ({civ}) ===",
         f"Quality-filtered sessions: {stats.get('total_sessions', 0)}",
-        f"Win rate: {stats.get('win_rate', 0):.1f}%",
+        wr_line,
         f"Avg Feudal: {_mmss(stats.get('avg_feudal_sec'))}",
         f"Best Feudal: {_mmss(stats.get('best_feudal_sec'))}",
         f"Avg Castle: {_mmss(stats.get('avg_castle_sec'))}",

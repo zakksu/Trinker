@@ -208,10 +208,13 @@ def _build_labels(profile: ReplayProfile, info) -> None:
 
 
 def extract_replay_profile(path: str | Path) -> ReplayProfile:
-    """Full 2.0 extraction pipeline for one replay file."""
+    """Full extraction pipeline for one replay file (engine v2)."""
+    from .engine_v2 import extract_replay_v2
+
     path = Path(path)
     meta = _parse_filename_metadata(path)
     info = parse_replay(path)
+    v2 = extract_replay_v2(path)
 
     profile = ReplayProfile(
         replay_path=str(path.resolve()),
@@ -221,7 +224,20 @@ def extract_replay_profile(path: str | Path) -> ReplayProfile:
         is_ranked=meta["is_ranked"],
         player_count=len(info.players),
         owner_steam_hint=_detect_steam_from_path(path),
-        parse_errors=list(info.parse_errors),
+        parse_errors=list(info.parse_errors) + v2.parse_errors,
+        civ=v2.civ if v2.civ != "Unknown" else (info.primary_civ() or "Unknown"),
+        player_name=v2.player_name,
+        feudal_time_sec=v2.feudal_time_sec,
+        castle_time_sec=v2.castle_time_sec,
+        imperial_time_sec=v2.imperial_time_sec,
+        duration_sec=v2.duration_sec,
+        final_pop=v2.final_pop,
+        eapm=v2.eapm,
+        result=v2.result,
+        data_quality=v2.data_quality,
+        parse_source=v2.parse_source,
+        confidence=v2.confidence,
+        validation_issues=v2.validation_issues,
     )
 
     if meta["is_mp"] or path.name.startswith("MP Replay"):
@@ -229,32 +245,19 @@ def extract_replay_profile(path: str | Path) -> ReplayProfile:
     elif path.name.startswith("SP Replay"):
         profile.game_mode = "sp"
 
-    civ = info.primary_civ()
-    if civ and civ != "Unknown":
-        profile.civ = civ
-
-    # 1) Try mgz (best when game version supported)
-    if not _apply_mgz(profile, path):
-        # 2) Strict binary scan fallback
-        try:
-            data = path.read_bytes()
-            _apply_scan(profile, data)
-        except OSError as exc:
-            profile.parse_errors.append(str(exc))
-
-    # Never use file-size duration heuristic
-    if profile.duration_sec is None and profile.parse_source == "none":
+    if profile.data_quality == "rejected" and not profile.has_timings():
         profile.data_quality = "low"
         profile.confidence = "low"
 
     _build_labels(profile, info)
 
     logger.info(
-        "Profile %s | civ=%s quality=%s feudal=%s source=%s",
+        "Profile %s | civ=%s quality=%s feudal=%s source=%s v2=%s",
         path.name,
         profile.civ,
         profile.data_quality,
         profile.feudal_time_sec,
         profile.parse_source,
+        v2.sources_used,
     )
     return profile
