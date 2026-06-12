@@ -82,8 +82,10 @@ Whether you are learning your first Meta Knight rush or tightening a 22-pop arch
 
 | Launcher | What it does |
 |----------|----------------|
-| **`LAUNCHER.bat`** | Retro launcher UI + optional update check |
-| **`UPDATE_AND_RUN.bat`** / **`TRINKER.bat`** | `git pull`, refresh data, then start |
+| **`LAUNCHER.bat`** | **Recommended** — update popup + latest version + launch |
+| **`TRINKER.bat`** | Same as LAUNCHER.bat |
+| **`RELEASE.bat`** | Publish to GitHub (confirmation popup first) |
+| **`UPDATE_AND_RUN.bat`** | Pull + launch (no launcher UI) |
 | **`UPDATE_EXE.bat`** | Download latest `TRINKER.exe` from GitHub Releases, then run |
 | **`dist\TRINKER.exe`** | Standalone build — no Python required |
 

@@ -1,11 +1,12 @@
 """
-TRINKER — Retro Game Launcher (early-2000s vibe)
-Auto-updates, installs dependencies, then launches the main app.
+TRINKER — Retro Game Launcher
+One click: check updates (popup if available) → pull → launch latest TRINKER.
 
 Usage:
-    python launcher.py
-    Double-click: LAUNCHER.bat
+    Double-click LAUNCHER.bat  (recommended — only entry point you need)
 """
+
+from __future__ import annotations
 
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -27,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.core.config import DATA_DIR, get_app_version
+from src.core.update_service import UpdateStatus, apply_git_pull, apply_pip_install, check_updates
 
 LAUNCHER_STYLE = """
 QWidget {
@@ -82,46 +85,28 @@ class _LaunchWorker(QObject):
     progress = Signal(int, str)
     finished = Signal(bool, str)
 
-    def run(self) -> None:
-        steps = [
-            (10, "Initializing TRINKER systems…"),
-            (25, "Checking for updates…"),
-            (45, "Verifying dependencies…"),
-            (65, "Preparing training modules…"),
-            (85, "Launching application…"),
-        ]
-        try:
-            for pct, msg in steps:
-                self.progress.emit(pct, msg)
-                if pct == 25:
-                    self._git_pull()
-                if pct == 45:
-                    self._pip_install()
+    def __init__(self, do_git_pull: bool):
+        super().__init__()
+        self._do_git_pull = do_git_pull
 
-            self.progress.emit(100, "Ready — starting TRINKER!")
+    def run(self) -> None:
+        try:
+            self.progress.emit(15, "Checking training modules…")
+            if self._do_git_pull:
+                self.progress.emit(35, "Downloading latest version from GitHub…")
+                ok, msg = apply_git_pull(_ROOT)
+                if not ok:
+                    self.finished.emit(False, f"Update failed: {msg}")
+                    return
+
+            self.progress.emit(60, "Verifying dependencies…")
+            apply_pip_install(_ROOT)
+
+            self.progress.emit(90, "Starting TRINKER…")
+            self.progress.emit(100, "Ready!")
             self.finished.emit(True, "")
         except Exception as exc:
             self.finished.emit(False, str(exc))
-
-    def _git_pull(self) -> None:
-        if not (_ROOT / ".git").exists():
-            return
-        subprocess.run(
-            ["git", "pull", "--ff-only"],
-            cwd=_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-
-    def _pip_install(self) -> None:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q"],
-            cwd=_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
 
 
 class TrinkerLauncher(QWidget):
@@ -131,6 +116,10 @@ class TrinkerLauncher(QWidget):
         self.setFixedSize(480, 340)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setStyleSheet(LAUNCHER_STYLE)
+        self._update_status: UpdateStatus | None = None
+        self._do_git_pull = False
+        self._thread = None
+        self._worker = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 28, 32, 24)
@@ -139,8 +128,7 @@ class TrinkerLauncher(QWidget):
         icon_path = _ROOT / "assets" / "trinker_icon.png"
         if icon_path.exists():
             pix = QPixmap(str(icon_path)).scaled(
-                72,
-                72,
+                72, 72,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
@@ -154,16 +142,17 @@ class TrinkerLauncher(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        sub = QLabel(f"AoE2 TRAINING COMPANION  ·  v{get_app_version()}")
-        sub.setObjectName("subtitle")
-        sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(sub)
+        self.lbl_version = QLabel(f"AoE2 TRAINING COMPANION  ·  v{get_app_version()}")
+        self.lbl_version.setObjectName("subtitle")
+        self.lbl_version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_version)
 
         layout.addSpacing(16)
 
-        self.lbl_status = QLabel("Click START to begin…")
+        self.lbl_status = QLabel("Checking for updates…")
         self.lbl_status.setObjectName("status")
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_status.setWordWrap(True)
         layout.addWidget(self.lbl_status)
 
         self.bar = QProgressBar()
@@ -174,7 +163,8 @@ class TrinkerLauncher(QWidget):
         layout.addStretch()
 
         self.btn_start = QPushButton("▶  START")
-        self.btn_start.clicked.connect(self._on_start)
+        self.btn_start.setVisible(False)
+        self.btn_start.clicked.connect(self._begin_launch)
         layout.addWidget(self.btn_start, alignment=Qt.AlignmentFlag.AlignCenter)
 
         hint = QLabel(f"Data: {DATA_DIR}")
@@ -183,19 +173,63 @@ class TrinkerLauncher(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        sub_hint = QLabel("Updates + dependencies handled automatically")
+        sub_hint = QLabel("Always launches the latest version from GitHub")
         sub_hint.setStyleSheet("color: #3a5a7a; font-size: 10px;")
         sub_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sub_hint)
 
-        self._thread = None
-        self._worker = None
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(200, self._check_and_start)
 
-    def _on_start(self) -> None:
+    def _check_and_start(self) -> None:
+        self.lbl_status.setText("Checking GitHub for updates…")
+        self.bar.setValue(5)
+        QApplication.processEvents()
+
+        self._update_status = check_updates(_ROOT)
+        self._do_git_pull = False
+
+        if self._update_status.has_git_update:
+            remote_v = self._update_status.remote_version or "latest"
+            msg = (
+                f"A newer TRINKER is available on GitHub.\n\n"
+                f"{self._update_status.summary()}\n\n"
+                f"Update now and launch v{remote_v}?"
+            )
+            box = QMessageBox(self)
+            box.setWindowTitle("TRINKER Update")
+            box.setText(msg)
+            box.setStandardButtons(
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel
+            )
+            box.setDefaultButton(QMessageBox.StandardButton.Yes)
+            choice = box.exec()
+
+            if choice == QMessageBox.StandardButton.Cancel:
+                self.close()
+                return
+            if choice == QMessageBox.StandardButton.Yes:
+                self._do_git_pull = True
+            # No = launch current version without pull
+
+        elif self._update_status.exe_update_available:
+            QMessageBox.information(
+                self,
+                "TRINKER Update",
+                f"GitHub Release v{self._update_status.remote_version} includes TRINKER.exe.\n\n"
+                "Run UPDATE_EXE.bat for the standalone app, or use git pull via this launcher.",
+            )
+
+        self._begin_launch()
+
+    def _begin_launch(self) -> None:
         self.btn_start.setEnabled(False)
-        self.bar.setValue(0)
+        self.bar.setValue(10)
         self._thread = QThread(self)
-        self._worker = _LaunchWorker()
+        self._worker = _LaunchWorker(self._do_git_pull)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(self._on_progress)
@@ -210,9 +244,14 @@ class TrinkerLauncher(QWidget):
     def _on_finished(self, ok: bool, err: str) -> None:
         if not ok:
             self.lbl_status.setText(f"Error: {err}")
+            self.btn_start.setVisible(True)
             self.btn_start.setEnabled(True)
             return
-        QTimer.singleShot(400, self._launch_app)
+        # Reload version label after pull
+        from src.core.config import get_app_version
+
+        self.lbl_version.setText(f"AoE2 TRAINING COMPANION  ·  v{get_app_version()}")
+        QTimer.singleShot(300, self._launch_app)
 
     def _launch_app(self) -> None:
         subprocess.Popen([sys.executable, str(_ROOT / "main.py")], cwd=_ROOT)

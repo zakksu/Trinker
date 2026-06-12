@@ -1,0 +1,10 @@
+# TRINKER release policy
+
+When completing a version bump or major feature milestone:
+
+1. Commit all changes with VERSION updated.
+2. Run `python scripts/release.py` (shows a **Windows popup** for user confirmation before push/tag/GitHub Release).
+3. Do **not** use `--yes` unless the user explicitly asked to skip confirmation.
+4. Tell the user: "Release popup should appear — click **Yes** to publish."
+
+User entry point is always **LAUNCHER.bat** (one click → latest version).
