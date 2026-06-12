@@ -31,6 +31,7 @@ from .notifications import ToastHost, set_toast_host, show_toast
 from .overlay import BuildOrderOverlay
 from .quick_start_tab import QuickStartTab
 from .settings_tab import SettingsTab
+from .medieval.icons import Icon
 from .theme import (
     apply_main_window,
     get_tokens,
@@ -59,13 +60,13 @@ class HeaderBar(QFrame):
         layout.setContentsMargins(16, 0, 16, 0)
         layout.setSpacing(16)
 
-        self._logo = QLabel("TRINKER")
+        self._logo = QLabel(f"{Icon.TRINKER} TRINKER")
         self._subtitle = QLabel("AoE2 Training Companion")
         layout.addWidget(self._logo)
         layout.addWidget(self._subtitle)
         layout.addStretch()
 
-        self.btn_overlay = QPushButton("⊞ Show Overlay")
+        self.btn_overlay = QPushButton(f"{Icon.OVERLAY} Show Overlay")
         self.btn_overlay.setCheckable(True)
         self.btn_overlay.toggled.connect(self.overlay_toggled.emit)
         layout.addWidget(self.btn_overlay)

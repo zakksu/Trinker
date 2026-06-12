@@ -31,24 +31,25 @@ from ..build_orders.models import BuildOrder, BuildStep
 from ..build_orders.step_timer import compute_step_timing
 from ..core.config import settings
 from ..core.logger import logger
+from .medieval.icons import Icon
+from .medieval.palette import get_palette, use_medieval_style
+from .medieval.styles import overlay_container_stylesheet, overlay_tab_stylesheet
 
-# ---------------------------------------------------------------------------
-# Status colors (traffic-light system)
-# ---------------------------------------------------------------------------
-
+# Status colors — medieval palette when enabled
+_p = get_palette()
 STATUS_COLORS = {
-    "green": "#2ecc71",
-    "yellow": "#f1c40f",
-    "red": "#e74c3c",
-    "neutral": "#95a5a6",
+    "green": _p.success if use_medieval_style() else "#2ecc71",
+    "yellow": _p.warning if use_medieval_style() else "#f1c40f",
+    "red": _p.error if use_medieval_style() else "#e74c3c",
+    "neutral": _p.ink_muted if use_medieval_style() else "#95a5a6",
 }
 
 DARK_BG = "rgba(18, 18, 20, {alpha})"
-STEP_BG = "#1e1e22"
-TEXT_COLOR = "#ecf0f1"
-DIM_COLOR = "#7f8c8d"
-ACCENT = "#3498db"
-NEXT_ACCENT = "#2ecc71"
+STEP_BG = _p.parchment if use_medieval_style() else "#1e1e22"
+TEXT_COLOR = _p.ink if use_medieval_style() else "#ecf0f1"
+DIM_COLOR = _p.ink_dim if use_medieval_style() else "#7f8c8d"
+ACCENT = _p.gold if use_medieval_style() else "#3498db"
+NEXT_ACCENT = _p.success if use_medieval_style() else "#2ecc71"
 
 
 def _rgba(hex_color: str, alpha: float = 1.0) -> str:
@@ -238,7 +239,7 @@ class StepCard(QFrame):
         self.lbl_desc = QLabel("")
         self.lbl_desc.setWordWrap(True)
         self.lbl_desc.setStyleSheet(
-            f"color: {TEXT_COLOR}; font-size: 15px; font-weight: bold; line-height: 1.3;"
+            f"color: {TEXT_COLOR}; font-size: 14px; font-weight: bold; line-height: 1.35;"
         )
         layout.addWidget(self.lbl_desc)
 
@@ -264,17 +265,17 @@ class StepCard(QFrame):
         self.lbl_index.setText(f"#{step.index}" if not label else label)
         self.lbl_desc.setText(step.description)
         self.lbl_time.setText(step.time_str if step.time_str else "")
-        self.lbl_pop.setText(f"👥 {step.population}" if step.population else "")
+        self.lbl_pop.setText(f"{Icon.POP} {step.population}" if step.population else "")
 
         res_parts = []
         if step.food is not None:
-            res_parts.append(f"🌾{step.food}")
+            res_parts.append(f"{Icon.FOOD}{step.food}")
         if step.wood is not None:
-            res_parts.append(f"🪵{step.wood}")
+            res_parts.append(f"{Icon.WOOD}{step.wood}")
         if step.gold is not None:
-            res_parts.append(f"🪙{step.gold}")
+            res_parts.append(f"{Icon.GOLD}{step.gold}")
         if step.stone is not None:
-            res_parts.append(f"🪨{step.stone}")
+            res_parts.append(f"{Icon.STONE}{step.stone}")
         self.lbl_resources.setText("  ".join(res_parts))
         self.lbl_resources.setVisible(bool(res_parts))
 
@@ -365,13 +366,18 @@ class BuildOrderOverlay(QWidget):
 
         # ── Container frame (gets background color) ────────────────────────
         self.container = QFrame(self)
-        self.container.setStyleSheet("""
-            QFrame {
-                background: rgba(14, 14, 16, 0.92);
-                border: 1px solid #2c2c2e;
-                border-radius: 12px;
-            }
-        """)
+        self.container.setObjectName("OverlayContainer")
+        alpha = settings.overlay_opacity
+        if use_medieval_style():
+            self.container.setStyleSheet(overlay_container_stylesheet(get_palette(), alpha))
+        else:
+            self.container.setStyleSheet("""
+                QFrame {
+                    background: rgba(14, 14, 16, 0.92);
+                    border: 1px solid #2c2c2e;
+                    border-radius: 12px;
+                }
+            """)
         root.addWidget(self.container)
 
         inner = QVBoxLayout(self.container)
@@ -379,7 +385,7 @@ class BuildOrderOverlay(QWidget):
         inner.setSpacing(4)
 
         title_row = QHBoxLayout()
-        self.lbl_title = QLabel("TRINKER")
+        self.lbl_title = QLabel(f"{Icon.TRINKER} TRINKER")
         self.lbl_title.setStyleSheet(
             f"color: {ACCENT}; font-size: 10px; font-weight: bold; letter-spacing: 2px;"
         )
@@ -407,14 +413,17 @@ class BuildOrderOverlay(QWidget):
         inner.addLayout(title_row)
 
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; background: transparent; }
-            QTabBar::tab {
-                background: #1a1a20; color: #7f8c8d; padding: 4px 10px;
-                margin-right: 2px; border-radius: 4px; font-size: 10px;
-            }
-            QTabBar::tab:selected { color: #3498db; background: #25252c; }
-        """)
+        if use_medieval_style():
+            self.tabs.setStyleSheet(overlay_tab_stylesheet(get_palette()))
+        else:
+            self.tabs.setStyleSheet("""
+                QTabWidget::pane { border: none; background: transparent; }
+                QTabBar::tab {
+                    background: #1a1a20; color: #7f8c8d; padding: 4px 10px;
+                    margin-right: 2px; border-radius: 4px; font-size: 10px;
+                }
+                QTabBar::tab:selected { color: #3498db; background: #25252c; }
+            """)
 
         # Tab: Steps (default view)
         tab_steps = QWidget()
@@ -436,7 +445,7 @@ class BuildOrderOverlay(QWidget):
         nav_row.addWidget(self.btn_prev)
         nav_row.addWidget(self.btn_next)
         steps_layout.addLayout(nav_row)
-        self.tabs.addTab(tab_steps, "Steps")
+        self.tabs.addTab(tab_steps, f"{Icon.OVERLAY} Steps")
 
         # Tab: Resources
         tab_res = QWidget()
@@ -444,7 +453,7 @@ class BuildOrderOverlay(QWidget):
         res_layout.setContentsMargins(4, 6, 4, 4)
         self.resource_panel = ResourcePanel(parent=self)
         res_layout.addWidget(self.resource_panel)
-        self.tabs.addTab(tab_res, "Resources")
+        self.tabs.addTab(tab_res, f"{Icon.GOLD} Res")
 
         # Tab: Coach / tips
         tab_tip = QWidget()
@@ -463,7 +472,7 @@ class BuildOrderOverlay(QWidget):
         self.lbl_tip.setStyleSheet(f"color: {DIM_COLOR}; font-size: 11px; padding: 4px;")
         tip_layout.addWidget(self.lbl_tip)
         tip_layout.addStretch()
-        self.tabs.addTab(tab_tip, "Tips")
+        self.tabs.addTab(tab_tip, f"{Icon.COACH} Tips")
 
         inner.addWidget(self.tabs)
 

@@ -1,6 +1,6 @@
 """
 TRINKER - Personal Dashboard
-At-a-glance summary: last game, stats, coach tip, build comparison, Ask Coach chat.
+At-a-glance summary with medieval strategy UI — stats, timeline, coach, compare.
 """
 
 from __future__ import annotations
@@ -8,11 +8,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
     QFrame,
-    QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -29,54 +27,29 @@ from ..analytics.replay_store import get_latest_replay_analysis, get_replay_anal
 from ..analytics.session import get_sessions, get_summary_stats
 from ..core.config import settings
 from ..integrations.aoe2gg import get_stored_matches, import_recent_matches, profile_url_for
+from .medieval.animations import stagger_fade_in
+from .medieval.icons import Icon
+from .medieval.palette import get_palette
+from .medieval.widgets import MedievalPanel, SectionHeader, StatCard, Timeline
 from .theme import apply_tab_panel, get_tokens
 
-_STATUS_COLORS = {
-    "green": "#2ecc71",
-    "yellow": "#f1c40f",
-    "red": "#e74c3c",
-    "neutral": "#95a5a6",
+_STATUS_ACCENTS = {
+    "green": "#6aab55",
+    "yellow": "#d4a017",
+    "red": "#b54a4a",
+    "neutral": "#7a6f5c",
 }
 
 
 def _fmt_sec(sec) -> str:
-    """Format seconds (int or float from DB/JSON) as M:SS."""
     if sec is None:
         return "—"
     sec = int(round(float(sec)))
     return f"{sec // 60}:{sec % 60:02d}"
 
 
-class _DashCard(QFrame):
-    def __init__(self, title: str, value: str = "—", color: str = "#3498db", parent=None):
-        super().__init__(parent)
-        t = get_tokens()
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {t.bg_elevated};
-                border: 1px solid {t.border};
-                border-radius: 10px;
-            }}
-        """)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        self.lbl_val = QLabel(value)
-        self.lbl_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_val.setStyleSheet(
-            f"color: {color}; font-size: 26px; font-weight: bold; font-family: monospace;"
-        )
-        self.lbl_title = QLabel(title)
-        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_title.setStyleSheet(f"color: {t.text_dim}; font-size: 11px;")
-        layout.addWidget(self.lbl_val)
-        layout.addWidget(self.lbl_title)
-
-    def set_value(self, value: str) -> None:
-        self.lbl_val.setText(value)
-
-
 class _CoachWorker(QObject):
-    finished = Signal(str, str)  # reply, error
+    finished = Signal(str, str)
 
     def __init__(self, question: str):
         super().__init__()
@@ -92,20 +65,24 @@ class _CoachWorker(QObject):
 
 
 class DashboardTab(QWidget):
-    """Personal dashboard — quick read on progress and last game."""
+    """Personal dashboard — command center for training progress."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._coach_thread: QThread | None = None
+        self._stat_cards: list[StatCard] = []
         self._setup_ui()
         self.apply_theme()
 
     def apply_theme(self, theme_name: str | None = None) -> None:
         apply_tab_panel(self)
         t = get_tokens(theme_name)
-        self._title.setStyleSheet(
-            f"font-size: 24px; font-weight: bold; color: {t.text_title};"
-        )
+        p = get_palette()
+        if t.medieval:
+            self._header.lbl_title.setStyleSheet(
+                f"color: {p.gold_bright}; font-size: 26px; font-weight: bold;"
+            )
+            self._header.lbl_sub.setStyleSheet(f"color: {p.ink_dim}; font-size: 12px;")
 
     def _setup_ui(self) -> None:
         scroll = QScrollArea()
@@ -114,91 +91,94 @@ class DashboardTab(QWidget):
 
         container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(32, 24, 32, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(28, 20, 28, 24)
+        layout.setSpacing(18)
 
-        self._title = QLabel("Dashboard")
-        layout.addWidget(self._title)
-
-        self.lbl_sub = QLabel("Your training snapshot — updates after each game.")
-        self.lbl_sub.setWordWrap(True)
-        layout.addWidget(self.lbl_sub)
+        self._header = SectionHeader(
+            "Command Center",
+            "Your training snapshot — updates after each game.",
+            Icon.DASHBOARD,
+        )
+        layout.addWidget(self._header)
 
         cards = QHBoxLayout()
-        self.card_sessions = _DashCard("GAMES SAVED", "0", "#3498db")
-        self.card_feudal = _DashCard("AVG FEUDAL", "—", "#e67e22")
-        self.card_quality = _DashCard("LAST QUALITY", "—", "#2ecc71")
-        for c in (self.card_sessions, self.card_feudal, self.card_quality):
+        cards.setSpacing(12)
+        p = get_palette()
+        self.card_sessions = StatCard(Icon.GAME, "Games Saved", "0", p.gold)
+        self.card_feudal = StatCard(Icon.TIMER, "Avg Feudal", "—", p.feudal)
+        self.card_quality = StatCard(Icon.QUALITY, "Last Quality", "—", p.success)
+        self._stat_cards = [self.card_sessions, self.card_feudal, self.card_quality]
+        for c in self._stat_cards:
             cards.addWidget(c)
         layout.addLayout(cards)
 
-        last_group = QGroupBox("Last Game")
-        last_layout = QVBoxLayout(last_group)
+        self.panel_last = MedievalPanel("Last Game", Icon.GAME)
         self.lbl_last_game = QLabel("No games detected yet — play with the overlay on.")
         self.lbl_last_game.setWordWrap(True)
-        last_layout.addWidget(self.lbl_last_game)
-        layout.addWidget(last_group)
+        p = get_palette()
+        self.lbl_last_game.setStyleSheet(f"color: {p.ink}; font-size: 12px; line-height: 1.4;")
+        self.panel_last.add_widget(self.lbl_last_game)
+        layout.addWidget(self.panel_last)
 
-        compare_group = QGroupBox("Compare to Build Order")
-        compare_layout = QVBoxLayout(compare_group)
+        self.panel_compare = MedievalPanel("Compare to Build Order", Icon.COMPARE)
         self.lbl_compare_summary = QLabel("—")
         self.lbl_compare_summary.setWordWrap(True)
-        compare_layout.addWidget(self.lbl_compare_summary)
-        self.compare_grid = QGridLayout()
-        compare_layout.addLayout(self.compare_grid)
-        self._compare_labels: list[QLabel] = []
-        layout.addWidget(compare_group)
+        self.lbl_compare_summary.setStyleSheet(f"color: {p.ink_dim}; font-size: 12px; font-weight: bold;")
+        self.panel_compare.add_widget(self.lbl_compare_summary)
+        self.compare_timeline = Timeline()
+        self.panel_compare.add_widget(self.compare_timeline)
+        layout.addWidget(self.panel_compare)
 
-        coach_group = QGroupBox("Coach Tip for Next Game")
-        coach_layout = QVBoxLayout(coach_group)
+        self.panel_coach = MedievalPanel("Coach Tip — Next Game", Icon.COACH)
         self.lbl_coach = QLabel("—")
         self.lbl_coach.setWordWrap(True)
-        coach_layout.addWidget(self.lbl_coach)
-        layout.addWidget(coach_group)
+        self.lbl_coach.setStyleSheet(
+            f"color: {p.gold_bright}; font-size: 13px; font-weight: bold; "
+            f"background: rgba(201,162,39,0.08); border-radius: 8px; padding: 10px;"
+        )
+        self.panel_coach.add_widget(self.lbl_coach)
+        layout.addWidget(self.panel_coach)
 
-        chat_group = QGroupBox("Ask Coach")
-        chat_layout = QVBoxLayout(chat_group)
+        self.panel_chat = MedievalPanel("Ask Coach", Icon.ASK)
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
         self.chat_history.setPlaceholderText("Ask about your last game, timings, or build order…")
-        self.chat_history.setMaximumHeight(160)
-        chat_layout.addWidget(self.chat_history)
+        self.chat_history.setMaximumHeight(150)
+        self.panel_chat.add_widget(self.chat_history)
         chat_row = QHBoxLayout()
         self.ed_question = QLineEdit()
         self.ed_question.setPlaceholderText("e.g. Why was my feudal late?")
         self.ed_question.returnPressed.connect(self._on_ask_coach)
         chat_row.addWidget(self.ed_question)
-        self.btn_ask = QPushButton("Ask")
+        self.btn_ask = QPushButton(f"{Icon.ASK} Ask")
         self.btn_ask.clicked.connect(self._on_ask_coach)
         chat_row.addWidget(self.btn_ask)
-        chat_layout.addLayout(chat_row)
-        layout.addWidget(chat_group)
+        self.panel_chat.add_layout(chat_row)
+        layout.addWidget(self.panel_chat)
 
-        online_group = QGroupBox("Online Matches (aoe2.gg)")
-        online_layout = QVBoxLayout(online_group)
+        self.panel_online = MedievalPanel("Ladder — aoe2.gg", Icon.LADDER)
         self.lbl_online = QLabel("Set Steam ID in Settings, then import recent ladder games.")
         self.lbl_online.setWordWrap(True)
-        online_layout.addWidget(self.lbl_online)
+        self.lbl_online.setStyleSheet(f"color: {p.ink_dim}; font-size: 12px;")
+        self.panel_online.add_widget(self.lbl_online)
         online_btns = QHBoxLayout()
-        self.btn_import = QPushButton("Import Recent Matches")
+        self.btn_import = QPushButton(f"{Icon.REFRESH} Import Matches")
         self.btn_import.clicked.connect(self._on_import_matches)
         online_btns.addWidget(self.btn_import)
-        self.btn_profile = QPushButton("Open aoe2.gg Profile")
+        self.btn_profile = QPushButton("Open Profile")
         self.btn_profile.clicked.connect(self._on_open_profile)
         online_btns.addWidget(self.btn_profile)
         online_btns.addStretch()
-        online_layout.addLayout(online_btns)
-        layout.addWidget(online_group)
+        self.panel_online.add_layout(online_btns)
+        layout.addWidget(self.panel_online)
 
-        recent_group = QGroupBox("Recent Games")
-        recent_layout = QVBoxLayout(recent_group)
-        self.lbl_recent = QLabel("—")
-        self.lbl_recent.setWordWrap(True)
-        recent_layout.addWidget(self.lbl_recent)
-        layout.addWidget(recent_group)
+        self.panel_recent = MedievalPanel("Recent Campaign", Icon.ANALYTICS)
+        self.recent_timeline = Timeline()
+        self.panel_recent.add_widget(self.recent_timeline)
+        layout.addWidget(self.panel_recent)
 
         btn_row = QHBoxLayout()
-        btn_refresh = QPushButton("Refresh")
+        btn_refresh = QPushButton(f"{Icon.REFRESH} Refresh")
         btn_refresh.clicked.connect(self.refresh)
         btn_row.addWidget(btn_refresh)
         btn_row.addStretch()
@@ -211,13 +191,7 @@ class DashboardTab(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(scroll)
 
-    def _clear_compare_grid(self) -> None:
-        while self.compare_grid.count():
-            item = self.compare_grid.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
-        self._compare_labels.clear()
+        stagger_fade_in(self._stat_cards, delay_ms=50)
 
     def _render_compare(self, feudal, castle, imperial) -> None:
         cmp = compare_to_build_order(
@@ -230,16 +204,15 @@ class DashboardTab(QWidget):
             if cmp.has_data()
             else cmp.summary
         )
-        self._clear_compare_grid()
-        for i, row in enumerate(cmp.rows):
-            color = _STATUS_COLORS.get(row.status, "#95a5a6")
-            lbl = QLabel(
-                f"{row.label}:  {row.actual}  vs  {row.target}  —  {row.detail}"
+        self.compare_timeline.clear()
+        for row in cmp.rows:
+            accent = _STATUS_ACCENTS.get(row.status, _STATUS_ACCENTS["neutral"])
+            self.compare_timeline.add_item(
+                Icon.status_glyph(row.status),
+                f"{row.label}:  {row.actual}  vs  {row.target}",
+                row.detail,
+                accent=accent,
             )
-            lbl.setWordWrap(True)
-            lbl.setStyleSheet(f"color: {color}; font-family: monospace; font-size: 11px;")
-            self.compare_grid.addWidget(lbl, i, 0)
-            self._compare_labels.append(lbl)
 
     def _load_chat_history(self) -> None:
         msgs = get_coach_messages("dashboard")
@@ -248,7 +221,7 @@ class DashboardTab(QWidget):
             return
         lines = []
         for m in msgs[-12:]:
-            prefix = "You" if m.role == "user" else "Coach"
+            prefix = "You" if m.role == "user" else f"{Icon.COACH} Coach"
             lines.append(f"{prefix}: {m.content}")
         self.chat_history.setPlainText("\n\n".join(lines))
 
@@ -268,7 +241,7 @@ class DashboardTab(QWidget):
             if error:
                 self.chat_history.append(f"Coach: Error — {error}")
             else:
-                self.chat_history.append(f"Coach: {reply}")
+                self.chat_history.append(f"{Icon.COACH} Coach: {reply}")
             thread.quit()
 
         worker.moveToThread(thread)
@@ -308,20 +281,48 @@ class DashboardTab(QWidget):
     def _render_online_matches(self) -> None:
         matches = get_stored_matches(limit=5)
         if not matches:
-            sid = settings.steam_id.strip()
-            if sid:
-                self.lbl_online.setText(
-                    f"No imported matches yet. Profile: {profile_url_for(sid)}"
-                )
             return
         lines = []
         for m in matches:
-            res = m.result.upper() if m.result != "unknown" else "?"
+            res = Icon.result_glyph(m.result)
             rating = f"  {m.rating}" if m.rating else ""
-            lines.append(
-                f"• {m.civ} on {m.map_name} — {res}{rating} vs {m.opponent}"
+            lines.append(f"{res} {m.civ} on {m.map_name} — vs {m.opponent}{rating}")
+        existing = self.lbl_online.text()
+        if "Imported" in existing or "Profile" in existing:
+            self.lbl_online.setText(existing + "\n\n" + "\n".join(lines))
+        else:
+            self.lbl_online.setText("\n".join(lines))
+
+    def _render_recent_timeline(self) -> None:
+        self.recent_timeline.clear()
+        p = get_palette()
+        recent = get_replay_analyses(5)
+        if recent:
+            for r in recent:
+                name = Path(r.replay_path).name[:52]
+                quality_color = p.success if r.data_quality == "high" else p.ink_dim
+                self.recent_timeline.add_item(
+                    Icon.GAME,
+                    f"{r.civ} — {name}",
+                    f"Quality: {r.data_quality}",
+                    accent=quality_color,
+                )
+            return
+        sessions = get_sessions(limit=5)
+        for s in sessions:
+            self.recent_timeline.add_item(
+                Icon.TIMER,
+                f"Session #{s.id}",
+                s.date[:16],
+                accent=p.gold_dim,
             )
-        self.lbl_online.setText("\n".join(lines))
+        if not sessions:
+            self.recent_timeline.add_item(
+                Icon.DASHBOARD,
+                "No saved games yet",
+                "Play with overlay on to start tracking.",
+                accent=p.ink_muted,
+            )
 
     def refresh(self) -> None:
         stats = get_summary_stats()
@@ -342,10 +343,10 @@ class DashboardTab(QWidget):
             imperial_sec = data.get("imperial_time_sec")
             feudal_s = _fmt_sec(feudal_sec)
             self.lbl_last_game.setText(
-                f"{Path(latest.replay_path).name}\n"
-                f"Civ: {latest.civ}  |  Map: {latest.map_name or '—'}  |  "
-                f"Mode: {latest.game_mode.upper()}  |  Feudal: {feudal_s}\n"
-                f"Quality: {latest.data_quality}"
+                f"{Icon.GAME}  {Path(latest.replay_path).name}\n\n"
+                f"{Icon.FEUDAL} Civ: {latest.civ}   ·   Map: {latest.map_name or '—'}\n"
+                f"{Icon.TIMER} Mode: {latest.game_mode.upper()}   ·   Feudal: {feudal_s}\n"
+                f"{Icon.QUALITY} Quality: {latest.data_quality}"
             )
         else:
             self.card_quality.set_value("—")
@@ -356,24 +357,12 @@ class DashboardTab(QWidget):
         self._render_compare(feudal_sec, castle_sec, imperial_sec)
 
         if settings.overlay_coach_alert:
-            self.lbl_coach.setText(settings.overlay_coach_alert)
+            self.lbl_coach.setText(f"{Icon.COACH}  {settings.overlay_coach_alert}")
         else:
-            self.lbl_coach.setText("Play a game — coach tips appear here after auto-analysis.")
+            self.lbl_coach.setText(
+                "Play a game — coach tips appear here after auto-analysis."
+            )
 
-        recent = get_replay_analyses(5)
-        if recent:
-            lines = []
-            for r in recent:
-                name = Path(r.replay_path).name[:48]
-                lines.append(f"• {r.civ} — {name} ({r.data_quality})")
-            self.lbl_recent.setText("\n".join(lines))
-        else:
-            sessions = get_sessions(limit=5)
-            if sessions:
-                lines = [f"• {s.date[:10]} — session #{s.id}" for s in sessions]
-                self.lbl_recent.setText("\n".join(lines))
-            else:
-                self.lbl_recent.setText("No saved games yet.")
-
+        self._render_recent_timeline()
         self._load_chat_history()
         self._render_online_matches()

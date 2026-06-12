@@ -9,6 +9,8 @@ from typing import Optional
 from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Qt, QTimer
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QVBoxLayout, QWidget
 
+from .medieval.icons import Icon
+from .medieval.palette import get_palette, use_medieval_style
 from .theme import get_tokens
 
 
@@ -21,19 +23,32 @@ class ToastWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         t = get_tokens()
-        colors = {
-            "info": (t.accent, t.accent_soft),
-            "success": (t.success, "rgba(46, 204, 113, 0.15)"),
-            "warning": (t.warning, "rgba(241, 196, 15, 0.15)"),
-            "error": (t.error, "rgba(231, 76, 60, 0.15)"),
-        }
+        p = get_palette()
+        if t.medieval:
+            colors = {
+                "info": (p.gold, "rgba(201, 162, 39, 0.18)"),
+                "success": (p.success, "rgba(106, 171, 85, 0.18)"),
+                "warning": (p.warning, "rgba(212, 160, 23, 0.18)"),
+                "error": (p.error, "rgba(181, 74, 74, 0.18)"),
+            }
+            border_radius = "10px"
+            text_color = p.ink
+        else:
+            colors = {
+                "info": (t.accent, t.accent_soft),
+                "success": (t.success, "rgba(46, 204, 113, 0.15)"),
+                "warning": (t.warning, "rgba(241, 196, 15, 0.15)"),
+                "error": (t.error, "rgba(231, 76, 60, 0.15)"),
+            }
+            border_radius = "8px"
+            text_color = t.text
         border, bg = colors.get(level, colors["info"])
 
         self.setStyleSheet(f"""
             ToastWidget {{
                 background: {bg};
-                border: 1px solid {border};
-                border-radius: 8px;
+                border: 2px solid {border};
+                border-radius: {border_radius};
                 padding: 4px;
             }}
         """)
@@ -43,7 +58,7 @@ class ToastWidget(QWidget):
         lbl = QLabel(message)
         lbl.setWordWrap(True)
         lbl.setMaximumWidth(360)
-        lbl.setStyleSheet(f"color: {t.text}; font-size: 12px;")
+        lbl.setStyleSheet(f"color: {text_color}; font-size: 12px;")
         layout.addWidget(lbl)
 
         self._opacity_effect = QGraphicsOpacityEffect(self)

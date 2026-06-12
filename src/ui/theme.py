@@ -1,5 +1,5 @@
 """
-TRINKER - Centralized theming (dark / light).
+TRINKER - Centralized theming (dark / light / medieval).
 Single source for QSS tokens used across main window, tabs, and dialogs.
 """
 
@@ -9,8 +9,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ..core.config import settings
+from .medieval.palette import get_palette, use_medieval_style
+from .medieval.styles import parchment_bg, wood_frame_border
 
-FONT_STACK = '"Segoe UI", "SF Pro Display", "Inter", sans-serif'
+FONT_STACK = '"Segoe UI", "Cinzel", "Georgia", "Times New Roman", serif'
+FONT_UI = '"Segoe UI", "SF Pro Display", "Inter", sans-serif'
 
 
 @dataclass(frozen=True)
@@ -37,10 +40,10 @@ class ThemeTokens:
     warning: str
     error: str
     selection: str
+    medieval: bool = False
 
 
 def _accent_variants(hex_color: str) -> tuple[str, str, str]:
-    """Return (accent, soft bg, muted border) from a #RRGGBB accent."""
     h = hex_color.lstrip("#")
     if len(h) != 6:
         hex_color = "#3498db"
@@ -49,9 +52,39 @@ def _accent_variants(hex_color: str) -> tuple[str, str, str]:
     return hex_color, f"rgba({r},{g},{b},0.12)", f"rgba({r},{g},{b},0.4)"
 
 
+def _medieval_tokens() -> ThemeTokens:
+    p = get_palette()
+    return ThemeTokens(
+        name="medieval",
+        accent=p.gold,
+        accent_soft="rgba(201, 162, 39, 0.15)",
+        accent_muted="rgba(201, 162, 39, 0.45)",
+        bg_root=p.parchment_dark,
+        bg_window=p.parchment,
+        bg_panel=p.parchment_light,
+        bg_input=p.parchment_dark,
+        bg_elevated=p.parchment_light,
+        bg_header=p.parchment_dark,
+        border=p.wood_frame,
+        border_subtle=p.wood_dark,
+        text=p.ink,
+        text_dim=p.ink_dim,
+        text_muted=p.ink_muted,
+        text_title=p.gold_bright,
+        success=p.success,
+        warning=p.warning,
+        error=p.error,
+        selection="rgba(201, 162, 39, 0.22)",
+        medieval=True,
+    )
+
+
 def get_tokens(theme_name: Optional[str] = None, accent: Optional[str] = None) -> ThemeTokens:
     """Resolve tokens for the active or requested theme."""
     name = (theme_name or settings.theme or "dark").lower()
+    if name != "light" and use_medieval_style():
+        return _medieval_tokens()
+
     accent_hex = accent or getattr(settings, "accent_color", None) or "#3498db"
     accent_main, accent_soft, accent_muted = _accent_variants(accent_hex)
 
@@ -103,12 +136,20 @@ def get_tokens(theme_name: Optional[str] = None, accent: Optional[str] = None) -
     )
 
 
+def _font_family(t: ThemeTokens) -> str:
+    return FONT_STACK if t.medieval else FONT_UI
+
+
 def stylesheet_main_window(t: ThemeTokens) -> str:
+    ff = _font_family(t)
+    bg = parchment_bg(get_palette()) if t.medieval else t.bg_root
+    tab_bg = get_palette().parchment_dark if t.medieval else t.bg_window
+    tab_sel = get_palette().parchment if t.medieval else t.bg_window
     return f"""
 QMainWindow, QWidget {{
-    background: {t.bg_root};
+    background: {bg};
     color: {t.text};
-    font-family: {FONT_STACK};
+    font-family: {ff};
 }}
 QTabWidget::pane {{
     border: none;
@@ -118,18 +159,19 @@ QTabBar {{
     background: {t.bg_root};
 }}
 QTabBar::tab {{
-    background: {t.bg_window};
+    background: {tab_bg};
     color: {t.text_dim};
     padding: 10px 20px;
     margin-right: 1px;
     border: none;
     font-size: 12px;
     letter-spacing: 0.5px;
+    font-weight: {"bold" if t.medieval else "normal"};
 }}
 QTabBar::tab:selected {{
     color: {t.accent};
-    border-bottom: 2px solid {t.accent};
-    background: {t.bg_window};
+    border-bottom: 3px solid {t.accent};
+    background: {tab_sel};
 }}
 QTabBar::tab:hover:!selected {{
     color: {t.text};
@@ -155,54 +197,68 @@ QMenu {{
     padding: 4px;
     color: {t.text};
 }}
-QMenu::item:selected {{ background: #2c2c3e; border-radius: 4px; }}
+QMenu::item:selected {{ background: {t.selection}; border-radius: 4px; }}
 QMenu::separator {{ height: 1px; background: {t.border}; margin: 4px 0; }}
 """
 
 
 def stylesheet_tab_panel(t: ThemeTokens) -> str:
-    """Shared styles for tab content widgets (Settings, Library, etc.)."""
+    ff = _font_family(t)
+    input_border = t.border
+    btn_hover = t.bg_elevated
+    if t.medieval:
+        p = get_palette()
+        input_border = p.wood_frame
+        btn_hover = p.parchment_light
+
     return f"""
 QWidget {{
     background: {t.bg_window};
     color: {t.text};
-    font-family: {FONT_STACK};
+    font-family: {ff};
 }}
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit {{
     background: {t.bg_input};
-    border: 1px solid {t.border};
+    border: 1px solid {input_border};
     border-radius: 6px;
-    padding: 5px 8px;
+    padding: 6px 10px;
     color: {t.text};
+}}
+QLineEdit:focus, QComboBox:focus {{
+    border: 1px solid {t.accent};
 }}
 QTextEdit {{
     background: {t.bg_elevated};
-    border: 1px solid {t.border};
-    border-radius: 6px;
+    border: 1px solid {input_border};
+    border-radius: 8px;
     color: {t.text};
+    padding: 4px;
 }}
 QGroupBox {{
-    border: 1px solid {t.border};
+    border: 1px solid {input_border};
     border-radius: 8px;
     margin-top: 10px;
     padding: 12px 10px 10px 10px;
 }}
 QGroupBox::title {{
-    color: {t.text_dim};
+    color: {t.text_title};
     padding: 0 8px;
     font-size: 11px;
     letter-spacing: 1px;
+    font-weight: bold;
 }}
 QPushButton {{
     background: {t.bg_input};
-    border: 1px solid {t.border};
+    border: 1px solid {input_border};
     border-radius: 6px;
-    padding: 6px 14px;
+    padding: 7px 16px;
     color: {t.text};
+    font-weight: {"bold" if t.medieval else "normal"};
 }}
 QPushButton:hover {{
-    background: {t.bg_elevated};
+    background: {btn_hover};
     border-color: {t.accent};
+    color: {t.text_title if t.medieval else t.text};
 }}
 QCheckBox {{ color: {t.text}; spacing: 8px; }}
 QSlider::groove:horizontal {{
@@ -219,6 +275,16 @@ QSlider::handle:horizontal {{
 }}
 QSlider::sub-page:horizontal {{ background: {t.accent}; border-radius: 3px; }}
 QScrollArea {{ border: none; background: transparent; }}
+QScrollBar:vertical {{
+    background: {t.bg_input};
+    width: 10px;
+    border-radius: 5px;
+}}
+QScrollBar::handle:vertical {{
+    background: {t.border};
+    border-radius: 5px;
+    min-height: 24px;
+}}
 """
 
 
@@ -245,10 +311,12 @@ QHeaderView::section {{
 
 
 def stylesheet_header_bar(t: ThemeTokens) -> str:
+    border = wood_frame_border(get_palette()) if t.medieval else t.border_subtle
+    bg = get_palette().parchment_dark if t.medieval else t.bg_header
     return f"""
 QFrame {{
-    background: {t.bg_header};
-    border-bottom: 1px solid {t.border_subtle};
+    background: {bg};
+    border-bottom: 2px solid {border if t.medieval else t.border_subtle};
 }}
 """
 
@@ -260,15 +328,17 @@ QPushButton {{
     color: {t.accent};
     border: 1px solid {t.accent_muted};
     border-radius: 6px;
-    padding: 5px 14px;
+    padding: 6px 16px;
     font-size: 11px;
     font-weight: bold;
+    letter-spacing: 1px;
 }}
 QPushButton:checked {{
-    background: rgba(52, 152, 219, 0.25);
+    background: {t.selection};
     border-color: {t.accent};
+    color: {t.text_title};
 }}
-QPushButton:hover {{ background: rgba(52, 152, 219, 0.2); }}
+QPushButton:hover {{ background: {t.selection}; }}
 """
 
 
@@ -282,6 +352,7 @@ QPushButton {{
     padding: 14px 24px;
     font-size: 13px;
     font-weight: bold;
+    letter-spacing: 0.5px;
 }}
 QPushButton:hover {{ background: {t.accent_soft}; border-color: {t.accent}; }}
 """
@@ -320,14 +391,12 @@ QComboBox {{
 
 
 def apply_main_window(widget) -> ThemeTokens:
-    """Apply main-window QSS; returns tokens for child styling."""
     t = get_tokens()
     widget.setStyleSheet(stylesheet_main_window(t))
     return t
 
 
 def apply_tab_panel(widget) -> ThemeTokens:
-    """Apply shared tab-panel QSS."""
     t = get_tokens()
     widget.setStyleSheet(stylesheet_tab_panel(t))
     return t

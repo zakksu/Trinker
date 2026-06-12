@@ -81,6 +81,11 @@ class SettingsTab(QWidget):
         self.cb_theme.currentTextChanged.connect(self.theme_preview_changed.emit)
         appear_form.addRow("Theme", self.cb_theme)
 
+        self.cb_ui_style = QComboBox()
+        self.cb_ui_style.addItems(["medieval", "classic"])
+        self.cb_ui_style.setToolTip("Medieval = parchment, gold, wood frames (dark theme only)")
+        appear_form.addRow("UI Style", self.cb_ui_style)
+
         self.sp_font = QSpinBox()
         self.sp_font.setRange(8, 22)
         self.sp_font.setSuffix(" px")
@@ -252,6 +257,8 @@ class SettingsTab(QWidget):
         """Load current settings into widgets."""
         idx = self.cb_theme.findText(settings.theme)
         self.cb_theme.setCurrentIndex(max(0, idx))
+        ui_idx = self.cb_ui_style.findText(getattr(settings, "ui_style", "medieval"))
+        self.cb_ui_style.setCurrentIndex(max(0, ui_idx))
         self.sp_font.setValue(settings.font_size)
         self.slider_opacity.setValue(int(settings.overlay_opacity * 100))
         self.chk_show_timings.setChecked(settings.show_timings)
@@ -288,6 +295,7 @@ class SettingsTab(QWidget):
             return
 
         settings.theme = self.cb_theme.currentText()
+        settings.ui_style = self.cb_ui_style.currentText()
         settings.font_size = self.sp_font.value()
         settings.overlay_opacity = self.slider_opacity.value() / 100.0
         settings.show_timings = self.chk_show_timings.isChecked()

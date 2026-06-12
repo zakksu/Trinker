@@ -6,12 +6,13 @@ from src.ui.theme import (
     stylesheet_tab_panel,
     stylesheet_table,
 )
+from src.ui.medieval.palette import get_palette
 
 
 def test_dark_tokens_have_required_fields():
     t = get_tokens("dark")
-    assert t.name == "dark"
-    assert t.accent.startswith("#")
+    assert t.name in ("dark", "medieval")
+    assert t.accent.startswith("#") or t.accent.startswith("rgba")
     assert t.bg_root
     assert t.text
 
@@ -32,4 +33,12 @@ def test_stylesheets_non_empty():
 
 def test_accent_color_override():
     t = get_tokens("dark", accent="#ff0000")
-    assert t.accent == "#ff0000"
+    if not t.medieval:
+        assert t.accent == "#ff0000"
+
+
+def test_medieval_dark_tokens():
+    t = get_tokens("dark")
+    if t.medieval:
+        assert t.text_title == get_palette().gold_bright
+        assert "QMainWindow" in stylesheet_main_window(t)

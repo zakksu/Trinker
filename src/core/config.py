@@ -108,6 +108,7 @@ class AppSettings:
     """
 
     theme: str = "dark"  # "dark" | "light"
+    ui_style: str = "medieval"  # "medieval" | "classic"
     accent_color: str = "#3498db"  # primary accent (future UI theming)
     overlay_opacity: float = 0.88  # 0.0 – 1.0
     overlay_position: list[int] = field(default_factory=lambda: [100, 100])
