@@ -1,0 +1,30 @@
+{
+  "description": "Local replay corpus for TRINKER parser and coach regression tests.",
+  "replays": [
+    {
+      "id": "synthetic_mp",
+      "file": "MP Replay v101.103.47452.0 @2026.06.08 213123 (1).aoe2record",
+      "generate": true,
+      "feudal_sec": 480,
+      "castle_sec": 960,
+      "expect": {
+        "filename_is_mp": true,
+        "postgame_offline_alert": true,
+        "analyze_no_crash": true
+      }
+    },
+    {
+      "id": "synthetic_late_feudal",
+      "file": "MP Replay v101.103.47452.0 @2026.06.09 184512 (2).aoe2record",
+      "generate": true,
+      "feudal_sec": 720,
+      "castle_sec": 1200,
+      "expect": {
+        "filename_is_mp": true,
+        "offline_coach_mentions_feudal": true,
+        "analyze_no_crash": true
+      }
+    }
+  ],
+  "remote": []
+}

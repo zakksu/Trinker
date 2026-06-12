@@ -173,7 +173,8 @@ Output: `dist\TRINKER.exe` — built with PyInstaller (`trinker.spec`).
 | **v2.0** ✅ | Compare-to-build, Ask Coach chat, aoe2.gg hook, CI pipeline |
 | **v2.1** ✅ | Medieval dark UI, dashboard cards, overlay polish |
 | **v2.2** ✅ | Win-rate heatmaps, streak badges, cross-platform CI + platformdirs |
-| **v2.3** | Replay corpus tests, Ollama auto-setup + RAG |
+| **v2.3** 🚧 | Expanded pytest-qt suite, replay corpus tests, E2E CI flows |
+| **v2.4** | Ollama auto-setup + RAG, replay corpus downloads |
 | **Future** | Civ-themed skins, build preview grid, practice simulation stub, plugin hooks |
 
 Track progress in [GitHub Issues](https://github.com/zakksu/Trinker/issues) and [Releases](https://github.com/zakksu/Trinker/releases).
@@ -205,9 +206,18 @@ Contributions welcome — bug reports, build orders, docs, and code.
    ruff check src tests
    pytest tests/ -q
    ```
-3. **Keep PRs focused** — one feature or fix per pull request.
-4. **Preserve offline behavior** — no required cloud services.
-5. Open a **Pull Request** against `main` with a short test plan.
+3. **UI / E2E tests** (headless Qt on Linux CI; optional locally):
+   ```bash
+   # Windows PowerShell
+   $env:QT_QPA_PLATFORM="offscreen"
+   pytest tests/test_ui_smoke.py tests/test_e2e_flows.py -q
+
+   # Replay corpus regression (synthetic replays, no network)
+   python scripts/replay_corpus_test.py
+   ```
+4. **Keep PRs focused** — one feature or fix per pull request.
+5. **Preserve offline behavior** — no required cloud services.
+6. Open a **Pull Request** against `main` with a short test plan.
 
 **Good first issues:** UI screenshots, build order JSON, replay edge cases, docs improvements.
 

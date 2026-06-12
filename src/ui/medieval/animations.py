@@ -10,6 +10,13 @@ from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
 def fade_in(widget: QWidget, duration_ms: int = 220) -> None:
     """Fade widget in on show."""
+    try:
+        from shiboken6 import isValid
+
+        if not isValid(widget):
+            return
+    except Exception:
+        pass
     effect = QGraphicsOpacityEffect(widget)
     widget.setGraphicsEffect(effect)
     anim = QPropertyAnimation(effect, b"opacity", widget)

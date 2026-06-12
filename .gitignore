@@ -26,3 +26,6 @@ Thumbs.db
 # Local debug scratch files
 _debug_bog.py
 _bog_sample.html
+
+# Generated replay corpus binaries (manifest.json drives creation)
+tests/fixtures/replays/*.aoe2record
