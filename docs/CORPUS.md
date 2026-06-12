@@ -54,3 +54,13 @@ For large files, host on GitHub Releases or a CDN and add to `"remote"`:
 | `feudal_sec_min/max` | Extracted feudal within window |
 
 Contributing 5–10 real replays (SP + MP, win + loss, multiple civs) is the **single highest-impact** contribution to TRINKER trust.
+
+### Easy drop folder (no git required)
+
+Copy `.aoe2record` files to:
+
+```
+%LOCALAPPDATA%\TRINKER\corpus_inbox\
+```
+
+TRINKER creates this folder on first run. Share those files with the developer or import via Practice tab.

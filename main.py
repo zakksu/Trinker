@@ -100,6 +100,14 @@ def main() -> int:
         print(f"[FATAL] Database init failed: {exc}", file=sys.stderr)
         return 1
 
+    # Step 1b: Auto-discover AoE2 replay folders (Documents / OneDrive / savegame)
+    try:
+        from src.core.replay_paths import ensure_replay_folders
+
+        ensure_replay_folders(save=True)
+    except Exception as exc:
+        logger.warning("Replay folder discovery skipped: %s", exc)
+
     # Step 2: Create the Qt application
     app = QApplication(sys.argv)
     _configure_app(app)

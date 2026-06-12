@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -109,7 +110,22 @@ class SettingsTab(QWidget):
 
         self.ed_replay_dir = QLineEdit()
         self.ed_replay_dir.setPlaceholderText("Extra replay folder (optional)")
-        appear_form.addRow("Replay folder", self.ed_replay_dir)
+        replay_row = QHBoxLayout()
+        replay_row.addWidget(self.ed_replay_dir, 1)
+        btn_browse_replay = QPushButton("Browse…")
+        btn_browse_replay.setToolTip("Pick your AoE2 savegame or Age of Empires 2 DE folder")
+        btn_browse_replay.clicked.connect(self._browse_replay_folder)
+        replay_row.addWidget(btn_browse_replay)
+        btn_scan_replays = QPushButton("Scan for Replays")
+        btn_scan_replays.setToolTip("Find Documents, OneDrive, and Steam savegame folders automatically")
+        btn_scan_replays.clicked.connect(self._scan_replay_folders)
+        replay_row.addWidget(btn_scan_replays)
+        appear_form.addRow("Replay folder", replay_row)
+
+        self.lbl_replay_access = QLabel("")
+        self.lbl_replay_access.setWordWrap(True)
+        self.lbl_replay_access.setStyleSheet("color: #b8a88a; font-size: 11px;")
+        appear_form.addRow("Replay access", self.lbl_replay_access)
 
         layout.addWidget(appear_group)
 
@@ -301,6 +317,7 @@ class SettingsTab(QWidget):
         self.ed_steam_id.setText(settings.steam_id)
         if settings.replay_dirs:
             self.ed_replay_dir.setText(settings.replay_dirs[0])
+        self._refresh_replay_access()
         self.ed_hotkey_next.set_hotkey(settings.hotkey_next_step)
         self.ed_hotkey_prev.set_hotkey(settings.hotkey_prev_step)
         self.ed_hotkey_overlay.set_hotkey(settings.hotkey_toggle_overlay)
@@ -358,9 +375,9 @@ class SettingsTab(QWidget):
         settings.steam_id = self.ed_steam_id.text().strip()
         extra = self.ed_replay_dir.text().strip()
         if extra:
-            from pathlib import Path
+            from ..core.replay_paths import register_replay_folder
 
-            settings.replay_dirs = [str(Path(extra).resolve())]
+            register_replay_folder(extra, save=False)
         settings.hotkey_next_step = normalize_key_sequence(hotkeys["next_step"])
         settings.hotkey_prev_step = normalize_key_sequence(hotkeys["prev_step"])
         settings.hotkey_toggle_overlay = normalize_key_sequence(hotkeys["toggle_overlay"])
@@ -372,6 +389,7 @@ class SettingsTab(QWidget):
         settings.ollama_model = self.ed_ollama_model.text().strip() or "llama3"
         settings.telemetry_opt_in = self.chk_telemetry.isChecked()
         settings.save()
+        self._refresh_replay_access()
         self.settings_changed.emit()
         logger.info("Settings saved.")
 
@@ -433,6 +451,67 @@ class SettingsTab(QWidget):
             show_toast("Ollama setup started in a new console window.", "info")
         except Exception as exc:
             QMessageBox.warning(self, "Setup", str(exc))
+
+    def _refresh_replay_access(self) -> None:
+        from ..core.replay_paths import probe_replay_access
+
+        report = probe_replay_access()
+        if report.readable:
+            self.lbl_replay_access.setText(
+                f"✓ {report.replay_count} replay(s) readable — newest: {report.newest_replay or '—'}"
+            )
+            self.lbl_replay_access.setStyleSheet("color: #6aab55; font-size: 11px;")
+        else:
+            hint = report.messages[0] if report.messages else "No replays found yet."
+            self.lbl_replay_access.setText(f"○ {hint}")
+            self.lbl_replay_access.setStyleSheet("color: #b8a88a; font-size: 11px;")
+
+    def _browse_replay_folder(self) -> None:
+        start = self.ed_replay_dir.text().strip()
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "Select AoE2 Replay Folder",
+            start or str(Path.home() / "Documents"),
+        )
+        if not path:
+            return
+        self.ed_replay_dir.setText(path)
+        from ..core.replay_paths import register_replay_folder
+
+        if register_replay_folder(path):
+            show_toast("Replay folder registered.", "success")
+        self._refresh_replay_access()
+
+    def _scan_replay_folders(self) -> None:
+        from ..core.replay_paths import ensure_replay_folders
+
+        report = ensure_replay_folders(save=True)
+        if settings.replay_dirs:
+            self.ed_replay_dir.setText(settings.replay_dirs[0])
+        self._refresh_replay_access()
+        if report.readable:
+            show_toast(
+                f"Found {report.replay_count} replay(s) in {len(report.search_roots)} folder(s).",
+                "success",
+            )
+            QMessageBox.information(
+                self,
+                "Replay Access",
+                f"TRINKER can read your game files.\n\n"
+                f"Replays found: {report.replay_count}\n"
+                f"Newest: {report.newest_replay or '—'}\n\n"
+                f"Folders scanned: {len(report.search_roots)}",
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Replay Access",
+                "No .aoe2record files found yet.\n\n"
+                "1. Play a game in AoE2 DE, then click Scan again.\n"
+                "2. Or use Browse to pick your savegame folder manually.\n\n"
+                "Typical path:\n"
+                "Documents\\My Games\\Age of Empires 2 DE\\<SteamID>\\savegame",
+            )
 
 
 def _open_dir(path: Path) -> None:

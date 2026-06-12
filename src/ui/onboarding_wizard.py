@@ -217,9 +217,9 @@ class OnboardingWizard(QWizard):
     def accept(self) -> None:
         extra = self.field("replay_folder").strip()
         if extra:
-            path = str(Path(extra).resolve())
-            if path not in settings.replay_dirs:
-                settings.replay_dirs.append(path)
+            from ..core.replay_paths import register_replay_folder
+
+            register_replay_folder(extra, save=False)
 
         settings.steam_id = self.field("steam_id").strip()
         settings.ollama_url = self.field("ollama_url").strip() or settings.ollama_url

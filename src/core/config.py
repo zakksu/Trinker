@@ -77,7 +77,8 @@ BO_DIR = DATA_DIR / "build_orders"  # local build order JSON cache
 EXPORT_DIR = DATA_DIR / "exports"
 
 # Create directories on import so downstream code never has to worry about it
-for _d in (DATA_DIR, LOG_DIR, CACHE_DIR, BO_DIR, EXPORT_DIR):
+CORPUS_INBOX = DATA_DIR / "corpus_inbox"  # drop .aoe2record here for TRINKER dev/testing
+for _d in (DATA_DIR, LOG_DIR, CACHE_DIR, BO_DIR, EXPORT_DIR, CORPUS_INBOX):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -223,15 +224,32 @@ class AppSettings:
 
 
 def get_replay_search_dirs() -> list[Path]:
-    """Replay folders to scan — custom paths first, then defaults."""
+    """Replay folders to scan — custom paths first, then defaults, then discovered."""
     dirs: list[Path] = []
+    seen: set[str] = set()
+
+    def add(p: Path) -> None:
+        if not p.exists():
+            return
+        try:
+            key = str(p.resolve())
+        except OSError:
+            key = str(p)
+        if key not in seen:
+            seen.add(key)
+            dirs.append(p)
+
     for raw in settings.replay_dirs:
-        p = Path(raw)
-        if p.exists() and p not in dirs:
-            dirs.append(p)
+        add(Path(raw))
     for p in AO2_REPLAY_DIRS:
-        if p.exists() and p not in dirs:
-            dirs.append(p)
+        add(p)
+    try:
+        from .replay_paths import discover_replay_roots
+
+        for p in discover_replay_roots():
+            add(p)
+    except Exception:
+        pass
     return dirs
 
 
