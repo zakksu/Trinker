@@ -11,6 +11,38 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+# Runtime env (Arbitragem parity) — not persisted in settings.json
+RESOURCE_RAM_FRACTION = _env_float("RESOURCE_RAM_FRACTION", 0.8)
+RESOURCE_GPU_FRACTION = _env_float("RESOURCE_GPU_FRACTION", 0.4)
+RAM_BUDGET_MB = _env_int("RAM_BUDGET_MB", 1200)
+LOW_RAM_MODE = _env_bool("LOW_RAM_MODE", False)
+TRINKER_BG_TESTS = _env_bool("TRINKER_BG_TESTS", True)
+OLLAMA_ENABLED = _env_bool("OLLAMA_ENABLED", True)
+OLLAMA_TIMEOUT_SECONDS = _env_int("OLLAMA_TIMEOUT_SECONDS", 120)
+OLLAMA_PROBE_TIMEOUT_SECONDS = _env_float("OLLAMA_PROBE_TIMEOUT_SECONDS", 1.5)
+
 # ---------------------------------------------------------------------------
 # Sandbox mode — isolated data dir for agent/dev (set TRINKER_SANDBOX=1)
 # ---------------------------------------------------------------------------
@@ -178,8 +210,8 @@ class AppSettings:
     auto_advance: bool = False  # auto-step on replay timer
     show_timings: bool = True
     ai_coach_enabled: bool = True
-    ollama_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3"
+    ollama_url: str = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    ollama_model: str = os.environ.get("OLLAMA_MODEL", "llama3")
     recommended_ollama_model: str = "llama3.2"
     rag_enabled: bool = True
     global_hotkeys_enabled: bool = True

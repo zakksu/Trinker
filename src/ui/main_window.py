@@ -406,11 +406,11 @@ class TrinkerMainWindow(QMainWindow):
         from ..core.ollama import ensure_ollama_enabled
 
         self._auto_import_timer = QTimer(self)
-        self._auto_import_timer.setInterval(45_000)
+        self._auto_import_timer.setInterval(30_000)
         self._auto_import_timer.timeout.connect(self._poll_auto_import)
         if settings.auto_detect_sessions:
             self._auto_import_timer.start()
-            QTimer.singleShot(5_000, self._poll_auto_import)
+            QTimer.singleShot(2_000, self._poll_auto_import)
 
         self._ollama_timer = QTimer(self)
         self._ollama_timer.setInterval(60_000)
@@ -432,8 +432,19 @@ class TrinkerMainWindow(QMainWindow):
         self.header.refresh_streak()
         show_toast(result.message, "success")
         self.status_bar.showMessage(result.message)
+        self._show_postgame_card(result)
         if settings.auto_postgame_coach and settings.ai_coach_enabled:
             self._run_silent_postgame_coach(result)
+
+    def _show_postgame_card(self, auto_result) -> None:
+        """Surface post-game summary on dashboard within ~30s of new replay."""
+        try:
+            self.tabs.setCurrentIndex(1)
+            self.dashboard_tab.refresh()
+            if hasattr(self.dashboard_tab, "show_postgame_hint"):
+                self.dashboard_tab.show_postgame_hint(auto_result)
+        except Exception as exc:
+            logger.debug("Post-game card skipped: %s", exc)
 
     def _run_silent_postgame_coach(self, auto_result) -> None:
         from ..ai_coach.postgame import create_postgame_worker

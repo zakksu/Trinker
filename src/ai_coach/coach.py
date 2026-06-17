@@ -19,7 +19,8 @@ try:
 except ImportError:
     _REQUESTS_OK = False
 
-from ..core.config import settings
+from ..core.config import OLLAMA_ENABLED, OLLAMA_PROBE_TIMEOUT_SECONDS, OLLAMA_TIMEOUT_SECONDS, settings
+from ..core.resource_profile import ollama_request_options
 from ..core.logger import logger
 from .prompt_builder import PromptBuilder
 from .summary import ReplaySummary
@@ -31,12 +32,12 @@ from .summary import ReplaySummary
 
 def _is_ollama_available() -> bool:
     """Quick check whether Ollama is reachable."""
-    if not _REQUESTS_OK or not settings.ai_coach_enabled:
+    if not _REQUESTS_OK or not settings.ai_coach_enabled or not OLLAMA_ENABLED:
         return False
     try:
         resp = _requests.get(
             f"{settings.ollama_url}/api/tags",
-            timeout=3,
+            timeout=OLLAMA_PROBE_TIMEOUT_SECONDS,
         )
         return resp.status_code == 200
     except Exception:
@@ -56,12 +57,13 @@ def _query_ollama(prompt: str) -> str:
         "options": {
             "temperature": 0.3,
             "num_predict": 512,
+            **ollama_request_options(),
         },
     }
     resp = _requests.post(
         f"{settings.ollama_url}/api/generate",
         json=payload,
-        timeout=60,
+        timeout=OLLAMA_TIMEOUT_SECONDS,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -77,12 +79,12 @@ def _query_ollama_chat(system: str, user: str) -> str:
             {"role": "user", "content": user},
         ],
         "stream": False,
-        "options": {"temperature": 0.25, "num_predict": 800},
+        "options": {"temperature": 0.25, "num_predict": 800, **ollama_request_options()},
     }
     resp = _requests.post(
         f"{settings.ollama_url}/api/chat",
         json=payload,
-        timeout=120,
+        timeout=OLLAMA_TIMEOUT_SECONDS,
     )
     if resp.status_code == 404:
         logger.debug("Ollama /api/chat not found — falling back to /api/generate")

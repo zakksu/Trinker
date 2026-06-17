@@ -150,6 +150,10 @@ def parse_with_mgz(path: str | Path) -> MgzParseResult:
         return result
 
     path = Path(path)
+    name = path.name
+    if "v101." in name or " v101 " in name:
+        result.errors.append("de_v101: mgz may lack age timings — scan fallback active")
+
     try:
         with path.open("rb") as handle:
             summary = Summary(handle, fallback=True)

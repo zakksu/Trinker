@@ -56,6 +56,12 @@ if %ERRORLEVEL% NEQ 0 (
     echo  WARNING: Build order seeding failed. You can retry later with: python seed_builds.py
     echo.
 )
+echo [3b/5] Syncing buildorderguide.com catalog (if library is thin)...
+python scripts\sync_buildorderguide.py --if-stale
+if %ERRORLEVEL% NEQ 0 (
+    echo  WARNING: buildorderguide sync skipped or partial. Retry: python scripts\sync_buildorderguide.py
+    echo.
+)
 echo.
 
 REM ─── Get install location ──────────────────────────────────────────────────

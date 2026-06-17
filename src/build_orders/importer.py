@@ -47,8 +47,15 @@ def _get(url: str, *, cache_key: Optional[str] = None) -> str:
     """
     Perform a GET request with optional caching.
     Cached HTML is stored in CACHE_DIR for offline use.
+    Also checks data/buildorderguide_cache/ from sync_buildorderguide.py.
     """
     if cache_key:
+        slug = cache_key.replace("bog_", "", 1) if cache_key.startswith("bog_") else cache_key
+        sync_cache = Path(__file__).resolve().parents[2] / "data" / "buildorderguide_cache" / f"{slug}.html"
+        if sync_cache.exists():
+            logger.debug("Sync cache hit: %s", slug)
+            return sync_cache.read_text(encoding="utf-8")
+
         cache_path = CACHE_DIR / f"{cache_key}.html"
         if cache_path.exists():
             age = time.time() - cache_path.stat().st_mtime

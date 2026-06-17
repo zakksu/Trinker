@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
+
+# Disable Ollama in tests by default (fast, deterministic CI)
+os.environ.setdefault("OLLAMA_ENABLED", "false")
+os.environ.setdefault("TRINKER_SANDBOX", "1")
 
 from src.build_orders.models import BuildOrder, BuildStep
 
@@ -120,6 +125,7 @@ def mock_ollama(monkeypatch):
     monkeypatch.setattr("src.ai_coach.coach._REQUESTS_OK", True)
     monkeypatch.setattr("src.ai_coach.coach._requests.get", _get)
     monkeypatch.setattr("src.ai_coach.coach._requests.post", _post)
+    monkeypatch.setattr("src.ai_coach.coach.OLLAMA_ENABLED", True)
 
     from src.core.config import settings
 

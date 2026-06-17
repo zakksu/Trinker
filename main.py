@@ -100,6 +100,13 @@ def main() -> int:
         print(f"[FATAL] Database init failed: {exc}", file=sys.stderr)
         return 1
 
+    try:
+        from scripts.sync_buildorderguide import maybe_background_sync
+
+        maybe_background_sync()
+    except Exception as exc:
+        logger.debug("Buildorderguide background sync skipped: %s", exc)
+
     # Step 1b: Auto-discover AoE2 replay folders (Documents / OneDrive / savegame)
     try:
         from src.core.replay_paths import ensure_replay_folders
