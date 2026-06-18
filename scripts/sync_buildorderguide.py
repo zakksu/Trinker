@@ -266,7 +266,7 @@ def main() -> int:
 
     if args.discover_only:
         urls = discover_build_urls()
-        print(f"Discovered {len(urls)} URLs → {_manifest_path()}")
+        print(f"Discovered {len(urls)} URLs -> {_manifest_path()}")
         return 0
 
     result = sync_all(force=args.force, max_builds=args.max)
