@@ -35,12 +35,24 @@ from src.core.config import DATA_DIR, get_app_version, settings
 from src.core.update_service import UpdateStatus, apply_git_pull, apply_pip_install, check_updates
 from src.ui.medieval.icons import Icon
 from src.ui.medieval.palette import get_palette
+from src.ui.medieval.styles import parchment_bg
 
 
 def _display_name() -> str:
-    name = (settings.player_name or "").strip()
-    if name:
-        return name
+    try:
+        import json
+        from src.analytics.replay_store import get_replay_analyses
+
+        for row in get_replay_analyses(3):
+            data = json.loads(row.profile_json or "{}")
+            name = (data.get("player_name") or "").strip()
+            if name:
+                return name.split()[0]
+    except Exception:
+        pass
+    sid = (settings.steam_id or "").strip()
+    if sid:
+        return f"Player {sid[-4:]}"
     return os.environ.get("USERNAME") or os.environ.get("USER") or "Commander"
 
 
@@ -175,9 +187,8 @@ class TrinkerLauncher(QWidget):
     def __init__(self):
         super().__init__()
         self.setObjectName("LauncherRoot")
-        self.setWindowTitle("TRINKER — Master Your Age")
-        self.resize(1120, 720)
-        self.setMinimumSize(960, 600)
+        self.setWindowTitle("TRINKER")
+        self.setFixedSize(980, 580)
         self.setStyleSheet(_hub_stylesheet())
         self._update_status: UpdateStatus | None = None
         self._do_git_pull = False
@@ -254,12 +265,9 @@ class TrinkerLauncher(QWidget):
         welcome = QLabel(f"WELCOME BACK, {_display_name().upper()}")
         welcome.setObjectName("Welcome")
         center.addWidget(welcome)
-        sub = QLabel(
-            "Your strategic companion for Age of Empires II DE.\n"
-            "Practice builds, analyze replays, and outthink your opponents."
-        )
+        sub = QLabel("Your AoE2 DE training companion")
         sub.setWordWrap(True)
-        sub.setStyleSheet("color: #b8a888; font-size: 13px; line-height: 1.4;")
+        sub.setStyleSheet("color: #b8a888; font-size: 13px;")
         center.addWidget(sub)
         center.addSpacing(16)
 
@@ -428,11 +436,55 @@ class TrinkerLauncher(QWidget):
         self.btn_launch.setEnabled(True)
         self.lbl_status.setText("● ALL SYSTEMS READY")
         self._load_sidebar_data()
+        QTimer.singleShot(400, self._prompt_ollama_then_enable)
+
+    def _prompt_ollama_then_enable(self) -> None:
+        try:
+            from src.core.config import settings as cfg
+
+            if cfg.ollama_setup_dismissed or not cfg.ai_coach_enabled:
+                return
+            from src.ai_coach.coach import _is_ollama_available
+
+            if _is_ollama_available():
+                return
+        except Exception:
+            return
+
+        from PySide6.QtWidgets import QMessageBox
+
+        box = QMessageBox(self)
+        box.setWindowTitle("TRINKER AI Coach")
+        box.setText(
+            "Optional: set up Ollama for smarter post-game tips.\n\n"
+            "TRINKER works fully without it.\n\nRun SETUP_AI.bat now?"
+        )
+        box.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if box.exec() == QMessageBox.StandardButton.Yes:
+            setup_bat = _ROOT / "SETUP_AI.bat"
+            if setup_bat.exists():
+                subprocess.Popen(["cmd", "/c", str(setup_bat)], cwd=_ROOT)
+            else:
+                subprocess.Popen(
+                    [sys.executable, str(_ROOT / "scripts" / "setup_ollama.py"), "--open-installer"],
+                    cwd=_ROOT,
+                )
+        else:
+            from src.core.config import settings as cfg
+
+            cfg.ollama_setup_dismissed = True
+            cfg.save()
 
     def _open_app_tab(self, tab_key: str) -> None:
+        if not self._ready:
+            self._begin_prepare()
+            return
         env = os.environ.copy()
         env["TRINKER_START_TAB"] = tab_key
         subprocess.Popen([sys.executable, str(_ROOT / "main.py")], cwd=_ROOT, env=env)
+        self.close()
 
     def _launch_app(self) -> None:
         if not self._ready:
