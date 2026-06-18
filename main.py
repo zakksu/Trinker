@@ -10,6 +10,7 @@ Packaging:
     pyinstaller --onefile --windowed --name TRINKER main.py
 """
 
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -131,6 +132,9 @@ def main() -> int:
     from src.ui.main_window import TrinkerMainWindow
 
     window = TrinkerMainWindow()
+    start_tab = os.environ.get("TRINKER_START_TAB", "").strip()
+    if start_tab:
+        window.navigate_to_start_tab(start_tab)
     window.show()
     window.raise_()
 

@@ -155,6 +155,31 @@ class TrinkerMainWindow(QMainWindow):
 
         logger.info("TRINKER main window initialized (v%s).", get_app_version())
 
+    def navigate_to_start_tab(self, tab_key: str) -> None:
+        """Open a tab by launcher sidebar / quick-link key."""
+        key = (tab_key or "").strip().lower()
+        widget_map = {
+            "play": self.quick_start_tab,
+            "start": self.quick_start_tab,
+            "start_here": self.quick_start_tab,
+            "library": self.library_tab,
+            "replays": self.dashboard_tab,
+            "dashboard": self.dashboard_tab,
+            "coach": self.training_tab,
+            "training": self.training_tab,
+            "analytics": self.analytics_tab,
+            "improve": self.analytics_tab,
+            "settings": self.settings_tab,
+        }
+        widget = widget_map.get(key)
+        if widget is None:
+            return
+        idx = self.tabs.indexOf(widget)
+        if idx >= 0:
+            self.tabs.setCurrentIndex(idx)
+            if widget is self.dashboard_tab:
+                self.dashboard_tab.refresh()
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if self._global_hotkeys:

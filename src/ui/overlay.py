@@ -424,6 +424,12 @@ class BuildOrderOverlay(QWidget):
         )
         self.lbl_progress = QLabel("")
         self.lbl_progress.setStyleSheet(f"color: {DIM_COLOR}; font-size: 10px;")
+        self.lbl_personal = QLabel("")
+        self.lbl_personal.setStyleSheet(
+            f"color: {_p.gold_dim if use_medieval_style() else '#5a9aca'}; "
+            f"font-size: 9px; font-weight: bold;"
+        )
+        self.lbl_personal.setVisible(False)
         self.btn_close = QPushButton("x")
         self.btn_close.setFixedSize(18, 18)
         self.btn_close.setStyleSheet(f"""
@@ -438,6 +444,7 @@ class BuildOrderOverlay(QWidget):
         title_row.addWidget(self.lbl_progress)
         title_row.addWidget(self.btn_close)
         inner.addLayout(title_row)
+        inner.addWidget(self.lbl_personal)
 
         self.tabs = QTabWidget()
         if use_medieval_style():
@@ -562,6 +569,7 @@ class BuildOrderOverlay(QWidget):
         self._current_index = 0
         self._steps_visited = 0
         self.lbl_bo_name.setText(f"{bo.name} ({bo.civ})")
+        self._refresh_personal_benchmark(bo)
         self._refresh_steps()
         self._show_coach_alert(bo)
         self._auto_start_timer()
@@ -663,6 +671,16 @@ class BuildOrderOverlay(QWidget):
         snap = self._ocr_watcher.read_region(settings.ocr_resource_region)
         if snap.raw_text or snap.age_text:
             self.resource_panel.set_live_snapshot(snap)
+
+    def _refresh_personal_benchmark(self, bo: BuildOrder) -> None:
+        try:
+            from ..analytics.personal_benchmarks import format_personal_benchmark_line
+
+            line = format_personal_benchmark_line(bo.civ, bo.strategy or "", bo.id)
+            self.lbl_personal.setText(line)
+            self.lbl_personal.setVisible(True)
+        except Exception:
+            self.lbl_personal.setVisible(False)
 
     def _show_coach_alert(self, bo: BuildOrder) -> None:
         """Display pinned post-game coaching alert if it matches this build."""

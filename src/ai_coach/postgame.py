@@ -8,6 +8,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from ..build_orders.build_intelligence import (
+    detect_top_mistakes,
+    suggest_next_build,
+    worst_timing_axis,
+)
 from ..analytics.compare import compare_to_build_order
 from ..analytics.history import build_historical_summary, compare_to_pro_benchmark
 from ..core.config import settings
@@ -94,6 +99,20 @@ def run_postgame_coach(
     for row in bo_cmp.rows:
         cmp_lines.append(f"  {row.label}: {row.actual} vs {row.target} [{row.status}]")
 
+    mistakes = detect_top_mistakes(
+        bo_cmp,
+        feudal_sec=analysis.feudal_time_sec,
+        castle_sec=analysis.castle_time_sec,
+    )
+    mistake_lines = [m.message for m in mistakes]
+    axis = worst_timing_axis(
+        civ,
+        strategy or "Fast Castle",
+        analysis.feudal_time_sec,
+        analysis.castle_time_sec,
+    )
+    suggested_next = suggest_next_build(axis)
+
     summary = ReplaySummary(
         civ=civ,
         build_name=build_order_name,
@@ -104,6 +123,7 @@ def run_postgame_coach(
         historical=historical,
         benchmark=pro_cmp,
         comparison="\n".join(cmp_lines),
+        mistakes=mistake_lines,
     )
     system_prompt, user_prompt = PromptBuilder.postgame_coaching(summary)
 
@@ -128,7 +148,7 @@ def run_postgame_coach(
         return _attach_suggested_drill(
             PostGameCoachResult(
                 report=offline,
-                suggested_build="18 Vills Scout Rush",
+                suggested_build=suggested_next,
                 overlay_alert=alert,
                 used_ai=False,
                 timeline=timeline,
@@ -145,7 +165,7 @@ def run_postgame_coach(
         return _attach_suggested_drill(
             PostGameCoachResult(
                 report=report,
-                suggested_build=suggested,
+                suggested_build=suggested or suggested_next,
                 overlay_alert=alert or "Focus on one clean feudal timing",
                 used_ai=True,
                 timeline=timeline,

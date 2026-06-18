@@ -1,13 +1,14 @@
 """
-TRINKER — Retro Game Launcher
-One click: check updates (popup if available) → pull → launch latest TRINKER.
+TRINKER — Master Your Age (hub launcher)
+One click: auto-pull latest → verify deps → LAUNCH TRINKER.
 
 Usage:
-    Double-click LAUNCHER.bat  (recommended — only entry point you need)
+    Double-click LAUNCHER.bat
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,67 +18,119 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
+    QHBoxLayout,
     QLabel,
-    QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
-from src.core.config import DATA_DIR, get_app_version
+from src.core.config import DATA_DIR, get_app_version, settings
 from src.core.update_service import UpdateStatus, apply_git_pull, apply_pip_install, check_updates
+from src.ui.medieval.icons import Icon
+from src.ui.medieval.palette import get_palette
 
-LAUNCHER_STYLE = """
-QWidget {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #1a2a4a, stop:0.5 #0d1528, stop:1 #060a14);
-    color: #c8d8f0;
-    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-}
-QLabel#title {
-    color: #7ec8ff;
-    font-size: 28px;
-    font-weight: bold;
-    letter-spacing: 6px;
-}
-QLabel#subtitle {
-    color: #5a7a9a;
-    font-size: 11px;
-    letter-spacing: 2px;
-}
-QLabel#status {
-    color: #8ab4d4;
-    font-size: 12px;
-}
-QProgressBar {
-    background: #0a1020;
-    border: 2px solid #2a4a6a;
-    border-radius: 4px;
-    height: 18px;
-    text-align: center;
-    color: #fff;
-}
-QProgressBar::chunk {
+
+def _display_name() -> str:
+    name = (settings.player_name or "").strip()
+    if name:
+        return name
+    return os.environ.get("USERNAME") or os.environ.get("USER") or "Commander"
+
+
+def _hub_stylesheet() -> str:
+    p = get_palette()
+    return f"""
+QWidget#LauncherRoot {{
+    background: #1a1814;
+    color: #e8dcc8;
+    font-family: "Segoe UI", "Georgia", serif;
+}}
+QFrame#Sidebar {{
+    background: #12100e;
+    border-right: 1px solid {p.wood_frame};
+}}
+QFrame#Banner {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #2060a0, stop:1 #40a0e0);
-    border-radius: 2px;
-}
-QPushButton {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #3a6a9a, stop:1 #1a3a5a);
-    color: #e0f0ff;
-    border: 2px solid #5a9aca;
+        stop:0 #2a2418, stop:0.5 #3d3424, stop:1 #2a2418);
+    border-bottom: 2px solid {p.gold_dim};
+    min-height: 72px;
+}}
+QFrame#Card {{
+    background: #252018;
+    border: 1px solid {p.wood_frame};
     border-radius: 6px;
-    padding: 10px 24px;
+}}
+QPushButton#NavBtn {{
+    background: transparent;
+    color: #c8b898;
+    border: none;
+    border-left: 3px solid transparent;
+    text-align: left;
+    padding: 12px 16px;
     font-size: 13px;
     font-weight: bold;
-}
-QPushButton:hover { background: #4a8aba; }
-QPushButton:disabled { color: #556; border-color: #334; }
+}}
+QPushButton#NavBtn:hover {{
+    background: #2a2418;
+    color: {p.gold_bright};
+}}
+QPushButton#NavBtn[active="true"] {{
+    background: #3d3424;
+    color: {p.gold_bright};
+    border-left: 3px solid {p.gold};
+}}
+QPushButton#LaunchBtn {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #3d8b4a, stop:1 #2a6b35);
+    color: white;
+    border: 2px solid #5cb86a;
+    border-radius: 8px;
+    padding: 16px 40px;
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 2px;
+}}
+QPushButton#LaunchBtn:hover {{
+    background: #4aa858;
+}}
+QPushButton#LaunchBtn:disabled {{
+    background: #444;
+    border-color: #555;
+    color: #888;
+}}
+QPushButton#QuickLink {{
+    background: transparent;
+    color: {p.gold};
+    border: 1px solid {p.wood_frame};
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 10px;
+}}
+QProgressBar {{
+    background: #12100e;
+    border: 1px solid {p.wood_frame};
+    height: 14px;
+    border-radius: 3px;
+}}
+QProgressBar::chunk {{
+    background: {p.gold};
+}}
+QLabel#Welcome {{
+    font-size: 28px;
+    font-weight: bold;
+    color: {p.gold_bright};
+}}
+QLabel#Muted {{
+    color: #8a8070;
+    font-size: 11px;
+}}
 """
 
 
@@ -91,19 +144,28 @@ class _LaunchWorker(QObject):
 
     def run(self) -> None:
         try:
-            self.progress.emit(15, "Checking training modules…")
+            self.progress.emit(10, "Checking GitHub…")
             if self._do_git_pull:
-                self.progress.emit(35, "Downloading latest version from GitHub…")
+                self.progress.emit(35, "Pulling latest TRINKER…")
                 ok, msg = apply_git_pull(_ROOT)
                 if not ok:
                     self.finished.emit(False, f"Update failed: {msg}")
                     return
-
-            self.progress.emit(60, "Verifying dependencies…")
+            self.progress.emit(55, "Verifying dependencies…")
             apply_pip_install(_ROOT)
+            self.progress.emit(80, "Background tests…")
+            try:
+                from src.core.resource_profile import get_resource_profile
 
-            self.progress.emit(90, "Starting TRINKER…")
-            self.progress.emit(100, "Ready!")
+                if get_resource_profile().background_tests:
+                    subprocess.Popen(
+                        [sys.executable, str(_ROOT / "scripts" / "test_worker.py"), "--once"],
+                        cwd=_ROOT,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    )
+            except Exception:
+                pass
+            self.progress.emit(100, "ALL SYSTEMS READY")
             self.finished.emit(True, "")
         except Exception as exc:
             self.finished.emit(False, str(exc))
@@ -112,121 +174,233 @@ class _LaunchWorker(QObject):
 class TrinkerLauncher(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("TRINKER Launcher")
-        self.setFixedSize(480, 340)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setStyleSheet(LAUNCHER_STYLE)
+        self.setObjectName("LauncherRoot")
+        self.setWindowTitle("TRINKER — Master Your Age")
+        self.resize(1120, 720)
+        self.setMinimumSize(960, 600)
+        self.setStyleSheet(_hub_stylesheet())
         self._update_status: UpdateStatus | None = None
         self._do_git_pull = False
+        self._ready = False
         self._thread = None
         self._worker = None
+        self._nav_buttons: dict[str, QPushButton] = {}
+        self._build_ui()
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 28, 32, 24)
-        layout.setSpacing(12)
+    def _build_ui(self) -> None:
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        icon_path = _ROOT / "assets" / "trinker_icon.png"
-        if icon_path.exists():
-            pix = QPixmap(str(icon_path)).scaled(
-                72, 72,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(pix)
-            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(icon_lbl)
+        # ── Sidebar ──
+        sidebar = QFrame()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setFixedWidth(200)
+        sb = QVBoxLayout(sidebar)
+        sb.setContentsMargins(0, 16, 0, 12)
+        sb.setSpacing(4)
 
-        title = QLabel("TRINKER")
-        title.setObjectName("title")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        logo = QLabel(f"{Icon.TRINKER} TRINKER")
+        logo.setStyleSheet("color: #d4af37; font-size: 14px; font-weight: bold; padding: 8px 16px;")
+        sb.addWidget(logo)
 
-        self.lbl_version = QLabel(f"AoE2 TRAINING COMPANION  ·  v{get_app_version()}")
-        self.lbl_version.setObjectName("subtitle")
-        self.lbl_version.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.lbl_version)
+        for key, label, icon in (
+            ("play", "PLAY", Icon.GAME),
+            ("library", "LIBRARY", Icon.LIBRARY),
+            ("replays", "REPLAYS", Icon.ANALYTICS),
+            ("coach", "COACH", Icon.COACH),
+        ):
+            btn = QPushButton(f"  {icon}  {label}")
+            btn.setObjectName("NavBtn")
+            btn.setProperty("active", key == "play")
+            btn.setStyleSheet(btn.styleSheet())
+            btn.clicked.connect(lambda checked=False, k=key: self._on_nav(k))
+            self._nav_buttons[key] = btn
+            sb.addWidget(btn)
 
-        layout.addSpacing(16)
+        sb.addStretch()
+        profile = QLabel(f"👤 {_display_name()}")
+        profile.setStyleSheet("padding: 8px 16px; font-size: 11px; color: #a89878;")
+        sb.addWidget(profile)
+        settings_btn = QPushButton(f"  {Icon.SETTINGS}  Settings")
+        settings_btn.setObjectName("NavBtn")
+        settings_btn.clicked.connect(lambda: self._open_app_tab("settings"))
+        sb.addWidget(settings_btn)
+        root.addWidget(sidebar)
 
-        self.lbl_status = QLabel("Checking for updates…")
-        self.lbl_status.setObjectName("status")
-        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_status.setWordWrap(True)
-        layout.addWidget(self.lbl_status)
+        # ── Main column ──
+        main_col = QVBoxLayout()
+        main_col.setContentsMargins(0, 0, 0, 0)
+        main_col.setSpacing(0)
 
+        banner = QFrame()
+        banner.setObjectName("Banner")
+        bl = QHBoxLayout(banner)
+        bl.setContentsMargins(24, 12, 24, 12)
+        bl.addWidget(QLabel("TRINKER"))
+        bl.addStretch()
+        self.lbl_version = QLabel(f"v{get_app_version()}")
+        self.lbl_version.setStyleSheet("color: #d4af37; font-weight: bold;")
+        bl.addWidget(self.lbl_version)
+        main_col.addWidget(banner)
+
+        body = QHBoxLayout()
+        body.setContentsMargins(24, 24, 24, 24)
+        body.setSpacing(24)
+
+        # Center welcome
+        center = QVBoxLayout()
+        center.setSpacing(12)
+        welcome = QLabel(f"WELCOME BACK, {_display_name().upper()}")
+        welcome.setObjectName("Welcome")
+        center.addWidget(welcome)
+        sub = QLabel(
+            "Your strategic companion for Age of Empires II DE.\n"
+            "Practice builds, analyze replays, and outthink your opponents."
+        )
+        sub.setWordWrap(True)
+        sub.setStyleSheet("color: #b8a888; font-size: 13px; line-height: 1.4;")
+        center.addWidget(sub)
+        center.addSpacing(16)
+
+        self.lbl_status = QLabel("Preparing…")
+        self.lbl_status.setStyleSheet("color: #8fdc9a; font-size: 12px;")
+        center.addWidget(self.lbl_status)
         self.bar = QProgressBar()
         self.bar.setRange(0, 100)
-        self.bar.setValue(0)
-        layout.addWidget(self.bar)
+        center.addWidget(self.bar)
 
-        layout.addStretch()
+        self.btn_launch = QPushButton("LAUNCH TRINKER")
+        self.btn_launch.setObjectName("LaunchBtn")
+        self.btn_launch.setEnabled(False)
+        self.btn_launch.clicked.connect(self._launch_app)
+        center.addWidget(self.btn_launch, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        self.btn_start = QPushButton("▶  START")
-        self.btn_start.setVisible(False)
-        self.btn_start.clicked.connect(self._begin_launch)
-        layout.addWidget(self.btn_start, alignment=Qt.AlignmentFlag.AlignCenter)
+        ql_row = QHBoxLayout()
+        for key, title in (
+            ("training", "PRACTICE"),
+            ("library", "LEARN"),
+            ("analytics", "IMPROVE"),
+            ("dashboard", "COMPETE"),
+        ):
+            b = QPushButton(title)
+            b.setObjectName("QuickLink")
+            b.setToolTip(f"Open {title.title()} in TRINKER")
+            b.clicked.connect(lambda checked=False, k=key: self._open_app_tab(k))
+            ql_row.addWidget(b)
+        center.addLayout(ql_row)
+        center.addStretch()
+        body.addLayout(center, stretch=3)
 
-        hint = QLabel(f"Data: {DATA_DIR}")
-        hint.setStyleSheet("color: #3a5a7a; font-size: 10px;")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
+        # Right panel
+        right = QVBoxLayout()
+        right.setSpacing(12)
+        feat = QFrame()
+        feat.setObjectName("Card")
+        fl = QVBoxLayout(feat)
+        fl.setContentsMargins(14, 14, 14, 14)
+        fl.addWidget(QLabel("FEATURED BUILD"))
+        self.lbl_featured = QLabel("Loading build library…")
+        self.lbl_featured.setWordWrap(True)
+        self.lbl_featured.setStyleSheet("font-size: 12px; color: #e8dcc8;")
+        fl.addWidget(self.lbl_featured)
+        right.addWidget(feat)
 
-        sub_hint = QLabel("Always launches the latest version from GitHub")
-        sub_hint.setStyleSheet("color: #3a5a7a; font-size: 10px;")
-        sub_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(sub_hint)
+        rec = QFrame()
+        rec.setObjectName("Card")
+        rl = QVBoxLayout(rec)
+        rl.setContentsMargins(14, 14, 14, 14)
+        rl.addWidget(QLabel("RECENT REPLAYS"))
+        self.lbl_replays = QLabel("—")
+        self.lbl_replays.setWordWrap(True)
+        self.lbl_replays.setStyleSheet("font-size: 11px; color: #a89878;")
+        rl.addWidget(self.lbl_replays)
+        right.addWidget(rec)
+        right.addStretch()
+        body.addLayout(right, stretch=2)
+
+        main_col.addLayout(body)
+        root.addLayout(main_col, stretch=1)
+        QTimer.singleShot(100, self._load_sidebar_data)
+
+    def _on_nav(self, key: str) -> None:
+        for k, btn in self._nav_buttons.items():
+            btn.setProperty("active", k == key)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+        if key != "play":
+            self._open_app_tab(key)
+
+    def _load_sidebar_data(self) -> None:
+        try:
+            from src.build_orders.manager import get_all_build_orders, get_build_order
+
+            bos = get_all_build_orders()
+            bo = None
+            if settings.last_practice_bo_id:
+                bo = get_build_order(settings.last_practice_bo_id)
+            if bo is None and bos:
+                bo = bos[0]
+            if bo:
+                feudal = "—"
+                for s in bo.steps:
+                    if s.age and "feudal" in (s.age or "").lower():
+                        feudal = s.time_str or f"{s.time_sec // 60}:{s.time_sec % 60:02d}"
+                        break
+                steps = "\n".join(
+                    f"  • {s.description[:60]}" for s in bo.steps[:3]
+                )
+                self.lbl_featured.setText(
+                    f"<b>{bo.name}</b><br>{bo.civ} · {bo.strategy}<br>"
+                    f"Feudal target: {feudal}<br>{steps}"
+                )
+            else:
+                self.lbl_featured.setText("Import builds from Library after first launch.")
+        except Exception:
+            self.lbl_featured.setText("Build library loads on first launch.")
+
+        try:
+            from src.analytics.replay_store import get_replay_analyses
+
+            rows = get_replay_analyses(3)
+            if rows:
+                lines = []
+                for r in rows:
+                    name = Path(r.replay_path).name if r.replay_path else "Replay"
+                    lines.append(f"• {name[:40]}")
+                self.lbl_replays.setText("\n".join(lines))
+            else:
+                from src.analytics.session import get_sessions
+
+                sessions = get_sessions(limit=3)
+                if sessions:
+                    self.lbl_replays.setText(
+                        "\n".join(f"• {s.civ or 'Game'} — {s.date}" for s in sessions)
+                    )
+                else:
+                    self.lbl_replays.setText("No replays yet — play a game!")
+        except Exception:
+            self.lbl_replays.setText("Replay history loads after first game.")
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        QTimer.singleShot(200, self._check_and_start)
+        QTimer.singleShot(200, self._auto_prepare)
 
-    def _check_and_start(self) -> None:
+    def _auto_prepare(self) -> None:
         self.lbl_status.setText("Checking GitHub for updates…")
         self.bar.setValue(5)
         QApplication.processEvents()
-
         self._update_status = check_updates(_ROOT)
-        self._do_git_pull = False
+        self._do_git_pull = bool(self._update_status.has_git_update)
+        if self._do_git_pull:
+            rv = self._update_status.remote_version or "latest"
+            self.lbl_status.setText(f"Update available — pulling v{rv}…")
+        else:
+            self.lbl_status.setText("Checking dependencies…")
+        self._begin_prepare()
 
-        if self._update_status.has_git_update:
-            remote_v = self._update_status.remote_version or "latest"
-            msg = (
-                f"A newer TRINKER is available on GitHub.\n\n"
-                f"{self._update_status.summary()}\n\n"
-                f"Update now and launch v{remote_v}?"
-            )
-            box = QMessageBox(self)
-            box.setWindowTitle("TRINKER Update")
-            box.setText(msg)
-            box.setStandardButtons(
-                QMessageBox.StandardButton.Yes
-                | QMessageBox.StandardButton.No
-                | QMessageBox.StandardButton.Cancel
-            )
-            box.setDefaultButton(QMessageBox.StandardButton.Yes)
-            choice = box.exec()
-
-            if choice == QMessageBox.StandardButton.Cancel:
-                self.close()
-                return
-            if choice == QMessageBox.StandardButton.Yes:
-                self._do_git_pull = True
-            # No = launch current version without pull
-
-        elif self._update_status.exe_update_available:
-            QMessageBox.information(
-                self,
-                "TRINKER Update",
-                f"GitHub Release v{self._update_status.remote_version} includes TRINKER.exe.\n\n"
-                "Run UPDATE_EXE.bat for the standalone app, or use git pull via this launcher.",
-            )
-
-        self._begin_launch()
-
-    def _begin_launch(self) -> None:
-        self.btn_start.setEnabled(False)
+    def _begin_prepare(self) -> None:
+        self.btn_launch.setEnabled(False)
         self.bar.setValue(10)
         self._thread = QThread(self)
         self._worker = _LaunchWorker(self._do_git_pull)
@@ -244,67 +418,26 @@ class TrinkerLauncher(QWidget):
     def _on_finished(self, ok: bool, err: str) -> None:
         if not ok:
             self.lbl_status.setText(f"Error: {err}")
-            self.btn_start.setVisible(True)
-            self.btn_start.setEnabled(True)
+            self.btn_launch.setEnabled(True)
+            self.btn_launch.setText("RETRY")
+            self.btn_launch.clicked.disconnect()
+            self.btn_launch.clicked.connect(self._begin_prepare)
             return
-        # Reload version label after pull
-        from src.core.config import get_app_version
+        self.lbl_version.setText(f"v{get_app_version()}")
+        self._ready = True
+        self.btn_launch.setEnabled(True)
+        self.lbl_status.setText("● ALL SYSTEMS READY")
+        self._load_sidebar_data()
 
-        self.lbl_version.setText(f"AoE2 TRAINING COMPANION  ·  v{get_app_version()}")
-        QTimer.singleShot(300, self._prompt_ollama_then_launch)
-
-    def _prompt_ollama_then_launch(self) -> None:
-        """Offer one-time AI setup if Ollama is missing."""
-        try:
-            from src.core.config import settings
-
-            if settings.ollama_setup_dismissed or not settings.ai_coach_enabled:
-                self._launch_app()
-                return
-            from src.ai_coach.coach import _is_ollama_available
-
-            if _is_ollama_available():
-                self._launch_app()
-                return
-        except Exception:
-            self._launch_app()
-            return
-
-        box = QMessageBox(self)
-        box.setWindowTitle("TRINKER AI Coach")
-        box.setText(
-            "Optional: set up the local AI coach (Ollama) for smarter post-game tips.\n\n"
-            "TRINKER works fully without it — offline tips are always available.\n\n"
-            "Run SETUP_AI.bat now?"
-        )
-        box.setStandardButtons(
-            QMessageBox.StandardButton.Yes
-            | QMessageBox.StandardButton.No
-            | QMessageBox.StandardButton.Cancel
-        )
-        box.setDefaultButton(QMessageBox.StandardButton.Yes)
-        choice = box.exec()
-
-        if choice == QMessageBox.StandardButton.Cancel:
-            self.close()
-            return
-        if choice == QMessageBox.StandardButton.Yes:
-            setup_bat = _ROOT / "SETUP_AI.bat"
-            if setup_bat.exists():
-                subprocess.Popen(["cmd", "/c", str(setup_bat)], cwd=_ROOT)
-            else:
-                subprocess.Popen(
-                    [sys.executable, str(_ROOT / "scripts" / "setup_ollama.py"), "--open-installer"],
-                    cwd=_ROOT,
-                )
-        else:
-            from src.core.config import settings
-
-            settings.ollama_setup_dismissed = True
-            settings.save()
-        self._launch_app()
+    def _open_app_tab(self, tab_key: str) -> None:
+        env = os.environ.copy()
+        env["TRINKER_START_TAB"] = tab_key
+        subprocess.Popen([sys.executable, str(_ROOT / "main.py")], cwd=_ROOT, env=env)
 
     def _launch_app(self) -> None:
+        if not self._ready:
+            self._begin_prepare()
+            return
         subprocess.Popen([sys.executable, str(_ROOT / "main.py")], cwd=_ROOT)
         self.close()
 

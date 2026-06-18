@@ -33,6 +33,7 @@ from ..analytics.charts import (
     render_win_rate_bar,
 )
 from ..analytics.history import build_historical_summary, get_recurring_themes
+from ..analytics.personal_benchmarks import format_personal_benchmark_line, list_personal_benchmark_rows
 from ..analytics.compare import compare_to_build_order
 from ..analytics.session import (
     get_activity_heatmap,
@@ -290,6 +291,13 @@ class DashboardTab(QWidget):
         self.panel_compare.add_widget(self.compare_timeline)
         layout.addWidget(self.panel_compare)
 
+        self.panel_personal = MedievalPanel("Your Benchmarks", Icon.TIMER)
+        self.lbl_personal_rows = QLabel("Play a few games to unlock personal feudal medians.")
+        self.lbl_personal_rows.setWordWrap(True)
+        self.lbl_personal_rows.setStyleSheet(f"color: {p.ink}; font-size: 12px; line-height: 1.5;")
+        self.panel_personal.add_widget(self.lbl_personal_rows)
+        layout.addWidget(self.panel_personal)
+
         self.panel_coach = MedievalPanel("Coach Tip — Next Game", Icon.COACH)
         self.lbl_coach = QLabel("—")
         self.lbl_coach.setWordWrap(True)
@@ -462,6 +470,21 @@ class DashboardTab(QWidget):
                 row.detail,
                 accent=accent,
             )
+
+    def _render_personal_benchmarks(self) -> None:
+        rows = list_personal_benchmark_rows(limit=6)
+        if not rows:
+            bo_line = format_personal_benchmark_line("Any", "Fast Castle")
+            self.lbl_personal_rows.setText(bo_line)
+            return
+        lines = []
+        for r in rows:
+            glyph = {"green": "●", "yellow": "◐", "red": "○"}.get(r["status"], "·")
+            lines.append(
+                f"{glyph} {r['civ']} — {r['build']}: median {r['median_feudal']} "
+                f"(target {r['target_feudal']}, n={r['samples']})"
+            )
+        self.lbl_personal_rows.setText("\n".join(lines))
 
     def _render_badges(self) -> None:
         while self._badges_row.count():
@@ -675,6 +698,7 @@ class DashboardTab(QWidget):
             )
 
         self._render_compare(feudal_sec, castle_sec, imperial_sec)
+        self._render_personal_benchmarks()
 
         self._render_drill(stats)
 

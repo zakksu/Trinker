@@ -1,0 +1,8 @@
+{
+  "xai_api_key_env": "XAI_API_KEY",
+  "default_model": "grok-code-fast-1",
+  "grok_build_cli": "grok-build",
+  "install_windows": "irm https://x.ai/cli/install.ps1 | iex",
+  "trinker_hook": "python scripts/grok_agent.py",
+  "notes": "Full Grok Build agent requires SuperGrok/X Premium Plus CLI login. API key alone uses xAI model endpoint, not the multi-agent Grok Build product."
+}

@@ -34,6 +34,8 @@ class ReplayAnalysis:
     final_pop: Optional[int] = None
     is_multiplayer: bool = False
     is_ranked: bool = False
+    is_team_game: bool = False
+    player_count: int = 0
     recorded_at: str = ""
     confidence: str = "low"  # low | medium | high
     parse_errors: list[str] = field(default_factory=list)
@@ -51,12 +53,14 @@ class ReplayAnalysis:
 
 def _parse_filename_metadata(path: Path) -> dict:
     """Extract date/time and MP info from standard DE replay filenames."""
-    meta = {"recorded_at": "", "is_mp": False, "is_ranked": False}
+    meta = {"recorded_at": "", "is_mp": False, "is_ranked": False, "is_team": False, "players": 0}
     name = path.name
     if name.startswith("MP Replay"):
         meta["is_mp"] = True
     if "RM_" in name or "ranked" in name.lower():
         meta["is_ranked"] = True
+    if "Team" in name or "TG_" in name or "team" in name.lower():
+        meta["is_team"] = True
     m = re.search(r"@(\d{4}\.\d{2}\.\d{2}\s+\d{6})", name)
     if m:
         meta["recorded_at"] = m.group(1)
@@ -128,6 +132,8 @@ def analyze_replay(path: str | Path) -> ReplayAnalysis:
     from .profile import extract_replay_profile
 
     profile = extract_replay_profile(path)
+    p = Path(path)
+    meta = _parse_filename_metadata(p)
     analysis = ReplayAnalysis(
         replay_path=profile.replay_path,
         civ=profile.civ,
@@ -137,8 +143,10 @@ def analyze_replay(path: str | Path) -> ReplayAnalysis:
         castle_time_sec=profile.castle_time_sec,
         imperial_time_sec=profile.imperial_time_sec,
         final_pop=profile.final_pop,
-        is_multiplayer=profile.game_mode == "mp",
-        is_ranked=profile.is_ranked,
+        is_multiplayer=profile.game_mode == "mp" or meta["is_mp"],
+        is_ranked=profile.is_ranked or meta["is_ranked"],
+        is_team_game=meta.get("is_team", False) or profile.player_count > 2,
+        player_count=profile.player_count or int(meta.get("players") or 0),
         recorded_at=profile.recorded_at,
         confidence=profile.confidence,
         parse_errors=profile.parse_errors + profile.validation_issues,

@@ -251,6 +251,7 @@ class AppSettings:
     overlay_sync_game_pause: bool = True  # pause overlay timer when game is paused
     onboarding_complete: bool = True  # first-run wizard (False for brand-new installs)
     steam_id: str = ""
+    player_name: str = ""  # launcher welcome line; empty → Windows username
     replay_dirs: list[str] = field(default_factory=list)  # custom AoE2 replay roots
 
     def save(self) -> None:
