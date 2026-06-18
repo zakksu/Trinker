@@ -1,56 +1,71 @@
-"""Tests for buildorderguide.com bulk sync."""
+"""Tests for buildorderguide.com bulk sync (Firestore card/modal site)."""
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from scripts.sync_buildorderguide import (
-    _extract_urls_from_html,
     discover_build_urls,
     import_build_url,
     needs_sync,
 )
+from src.build_orders.bog_firestore import (
+    bog_step_to_description,
+    build_order_from_bog_data,
+    decode_firestore_doc,
+)
 from src.build_orders.models import BuildStep
 from src.build_orders.step_enricher import enrich_steps as enrich_steps_fn
 
-
-SAMPLE_INDEX_HTML = """
-<html><body>
-<a href="/builds/abc123slug">Build A</a>
-<a href="https://www.buildorderguide.com/builds/xyz789slug">Build B</a>
-</body></html>
-"""
-
-SAMPLE_BUILD_HTML = """
-<html><head><title>22 Pop Archer Rush</title></head><body>
-<h1>22 Pop Archer Rush</h1>
-<table class="steps">
-<tr><td>1</td><td>0:00</td><td>6</td><td>Queue 2 vills, build house</td></tr>
-<tr><td>2</td><td>2:30</td><td>10</td><td>Lure boar to TC</td></tr>
-<tr><td>3</td><td>8:00</td><td>22</td><td>Click feudal age</td></tr>
-</table>
-</body></html>
-"""
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "buildorderguide"
 
 
-def test_extract_urls_from_html():
-    urls = _extract_urls_from_html(SAMPLE_INDEX_HTML)
-    assert "https://www.buildorderguide.com/builds/abc123slug" in urls
-    assert "https://www.buildorderguide.com/builds/xyz789slug" in urls
+def _load_json(name: str) -> dict:
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def test_discover_build_urls_mocked(tmp_path, monkeypatch):
+def test_bog_step_to_description_new_villagers():
+    step = {"type": "newVillagers", "count": 6, "task": "sheep", "buildings": [{"type": "house", "count": 2}]}
+    text = bog_step_to_description(step)
+    assert "6" in text
+    assert "Sheep" in text
+    assert "House" in text
+
+
+def test_decode_firestore_listing_doc():
+    doc = _load_json("firestore_listing_doc.json")
+    data = decode_firestore_doc(doc)
+    assert data["id"] == "abc123slug"
+    assert data["title"] == "22 Pop Archer Rush"
+    assert data["status"] == "published"
+
+
+def test_build_order_from_firestore_detail():
+    doc = _load_json("firestore_detail_doc.json")
+    data = decode_firestore_doc(doc)
+    bo = build_order_from_bog_data(data)
+    assert bo.name == "22 Pop Archer Rush"
+    assert bo.civ == "Britons"
+    assert bo.external_id == "abc123slug"
+    assert len(bo.steps) >= 3
+    assert "vill" in bo.steps[0].description.lower()
+
+
+def test_discover_build_urls_firestore_mocked(tmp_path, monkeypatch):
     cache = tmp_path / "cache"
     monkeypatch.setattr("scripts.sync_buildorderguide.CACHE_DIR", cache)
 
-    def fetcher(url: str):
-        resp = MagicMock()
-        resp.text = SAMPLE_INDEX_HTML if "builds" in url else SAMPLE_INDEX_HTML
-        resp.raise_for_status = MagicMock()
-        return resp
-
-    urls = discover_build_urls(fetcher=fetcher, max_pages=1)
-    assert len(urls) >= 2
+    with patch(
+        "scripts.sync_buildorderguide.firestore_discover_urls",
+        return_value=[
+            "https://www.buildorderguide.com/builds/abc123slug",
+            "https://www.buildorderguide.com/builds/xyz789slug",
+        ],
+    ):
+        urls = discover_build_urls()
+    assert len(urls) == 2
     assert (cache / "manifest.json").exists()
 
 
@@ -78,23 +93,19 @@ def test_needs_sync_empty_db(monkeypatch, tmp_path):
     assert needs_sync(min_builds=50) is True
 
 
-def test_import_build_url_uses_fetcher(monkeypatch, tmp_path):
+def test_import_build_url_uses_firestore(tmp_path, monkeypatch):
     cache = tmp_path / "bog_cache"
     monkeypatch.setattr("scripts.sync_buildorderguide.CACHE_DIR", cache)
 
-    url = "https://www.buildorderguide.com/builds/testslug1"
+    url = "https://www.buildorderguide.com/builds/abc123slug"
+    detail = decode_firestore_doc(_load_json("firestore_detail_doc.json"))
 
-    def fetcher(u: str):
-        resp = MagicMock()
-        resp.text = SAMPLE_BUILD_HTML
-        resp.raise_for_status = MagicMock()
-        return resp
+    with patch("scripts.sync_buildorderguide.fetch_published_build", return_value=detail):
+        with patch("scripts.sync_buildorderguide.import_and_save") as save_mock:
+            import_build_url(url, enrich=True)
 
-    bo_mock = MagicMock()
-    bo_mock.steps = [BuildStep(index=1, description="Test", population=6)]
-
-    with patch("scripts.sync_buildorderguide.import_from_buildorderguide", return_value=bo_mock):
-        with patch("scripts.sync_buildorderguide.import_and_save"):
-            import_build_url(url, fetcher=fetcher, enrich=True)
-
-    assert (cache / "testslug1.html").exists()
+    assert (cache / "abc123slug.json").exists()
+    save_mock.assert_called_once()
+    saved = save_mock.call_args[0][0]
+    assert saved.name == "22 Pop Archer Rush"
+    assert len(saved.steps) >= 3

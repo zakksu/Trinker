@@ -1,0 +1,90 @@
+{
+  "name": "projects/build-order-guide/databases/(default)/documents/published-builds/abc123slug",
+  "fields": {
+    "title": {"stringValue": "22 Pop Archer Rush"},
+    "civilization": {"stringValue": "Britons"},
+    "author": {"stringValue": "Test Author"},
+    "description": {"stringValue": "Standard archer rush opening."},
+    "status": {"stringValue": "published"},
+    "difficulty": {"integerValue": "2"},
+    "build": {
+      "arrayValue": {
+        "values": [
+          {
+            "mapValue": {
+              "fields": {
+                "type": {"stringValue": "newVillagers"},
+                "count": {"integerValue": "6"},
+                "task": {"stringValue": "sheep"},
+                "resources": {
+                  "mapValue": {
+                    "fields": {
+                      "food": {"integerValue": "6"},
+                      "wood": {"integerValue": "0"},
+                      "gold": {"integerValue": "0"},
+                      "stone": {"integerValue": "0"},
+                      "build": {"integerValue": "0"}
+                    }
+                  }
+                },
+                "buildings": {
+                  "arrayValue": {
+                    "values": [
+                      {
+                        "mapValue": {
+                          "fields": {
+                            "type": {"stringValue": "house"},
+                            "count": {"integerValue": "2"}
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "mapValue": {
+              "fields": {
+                "type": {"stringValue": "lure"},
+                "animal": {"stringValue": "boar"},
+                "count": {"integerValue": "1"},
+                "resources": {
+                  "mapValue": {
+                    "fields": {
+                      "food": {"integerValue": "14"},
+                      "wood": {"integerValue": "3"},
+                      "gold": {"integerValue": "0"},
+                      "stone": {"integerValue": "0"},
+                      "build": {"integerValue": "0"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "mapValue": {
+              "fields": {
+                "type": {"stringValue": "ageUp"},
+                "age": {"stringValue": "feudalAge"},
+                "resources": {
+                  "mapValue": {
+                    "fields": {
+                      "food": {"integerValue": "14"},
+                      "wood": {"integerValue": "6"},
+                      "gold": {"integerValue": "0"},
+                      "stone": {"integerValue": "0"},
+                      "build": {"integerValue": "0"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

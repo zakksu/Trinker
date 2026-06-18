@@ -159,6 +159,9 @@ else:
 # ---------------------------------------------------------------------------
 
 BUILDORDERGUIDE_BASE = "https://www.buildorderguide.com"
+# Public Firebase web client config (same as buildorderguide.com frontend JS)
+BOG_FIRESTORE_PROJECT = "build-order-guide"
+BOG_FIRESTORE_API_KEY = "AIzaSyDD-er0OkQFLqynyYIPoNuezWeDY0J13Is"
 AOE2GG_BASE = "https://aoe2.gg"
 AOE2NET_BASE = "https://aoe2.net/api"
 

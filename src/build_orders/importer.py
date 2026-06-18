@@ -138,6 +138,16 @@ def import_from_buildorderguide(url: str) -> BuildOrder:
         steps = _parse_generic_steps(soup)
 
     if not steps:
+        # Site now stores builds in Firestore; detail pages are client-rendered modals.
+        try:
+            from .bog_firestore import import_build_from_firestore
+
+            logger.info("HTML parse empty for %s — fetching Firestore document", slug)
+            return import_build_from_firestore(slug)
+        except Exception as exc:
+            logger.debug("Firestore fallback failed for %s: %s", slug, exc)
+
+    if not steps:
         raise RuntimeError(
             "Could not parse build steps from buildorderguide.com — "
             "the page structure may have changed. Try the manual editor."

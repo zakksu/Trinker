@@ -1,0 +1,23 @@
+{
+  "name": "projects/build-order-guide/databases/(default)/documents/published-builds/abc123slug",
+  "fields": {
+    "title": {"stringValue": "22 Pop Archer Rush"},
+    "civilization": {"stringValue": "Britons"},
+    "status": {"stringValue": "published"},
+    "build": {
+      "arrayValue": {
+        "values": [
+          {
+            "mapValue": {
+              "fields": {
+                "type": {"stringValue": "newVillagers"},
+                "count": {"integerValue": "6"},
+                "task": {"stringValue": "sheep"}
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

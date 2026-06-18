@@ -115,9 +115,28 @@ def _create_github_release(
     upload_url = release.get("upload_url", "").split("{")[0]
 
     if exe_path and exe_path.exists() and upload_url:
+        release_id = release.get("id")
+        if release_id:
+            assets_resp = requests.get(
+                f"{api}/{release_id}/assets",
+                headers=headers,
+                timeout=15,
+            )
+            if assets_resp.ok:
+                for asset in assets_resp.json():
+                    if asset.get("name") == exe_path.name:
+                        del_resp = requests.delete(
+                            f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{asset['id']}",
+                            headers=headers,
+                            timeout=30,
+                        )
+                        if del_resp.status_code in (204, 404):
+                            print(f"Replaced existing {exe_path.name} asset")
+                        break
+
         with exe_path.open("rb") as fh:
             up = requests.post(
-                f"{upload_url}?name=TRINKER.exe",
+                f"{upload_url}?name={exe_path.name}",
                 headers={
                     **headers,
                     "Content-Type": "application/octet-stream",
@@ -125,8 +144,11 @@ def _create_github_release(
                 data=fh,
                 timeout=300,
             )
-        up.raise_for_status()
-        print(f"Uploaded: {exe_path.name}")
+        if up.status_code == 422:
+            print(f"{exe_path.name} already on release — skipping upload")
+        else:
+            up.raise_for_status()
+            print(f"Uploaded: {exe_path.name}")
 
     return html_url
 

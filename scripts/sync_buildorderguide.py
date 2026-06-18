@@ -2,7 +2,8 @@
 """
 Sync full buildorderguide.com catalog into TRINKER SQLite.
 
-Discovers build URLs, rate-limits fetches, caches HTML, imports + enriches steps.
+Discovers builds via Firebase Firestore (card/modal site), rate-limits fetches,
+caches JSON, imports + enriches steps.
 """
 
 from __future__ import annotations
@@ -15,18 +16,22 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import requests
-from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.build_orders.importer import import_from_buildorderguide  # noqa: E402
+from src.build_orders.bog_firestore import (  # noqa: E402
+    build_order_from_bog_data,
+    cache_build_json,
+    discover_build_urls as firestore_discover_urls,
+    fetch_published_build,
+)
 from src.build_orders.manager import get_all_build_orders, import_and_save  # noqa: E402
 from src.build_orders.step_enricher import enrich_steps  # noqa: E402
-from src.core.config import BUILDORDERGUIDE_BASE, REQUEST_HEADERS, REQUEST_TIMEOUT  # noqa: E402
+from src.core.config import BUILDORDERGUIDE_BASE  # noqa: E402
 from src.core.database import db_conn, init_db  # noqa: E402
 from src.core.logger import logger  # noqa: E402
 from src.core.resource_profile import get_resource_profile  # noqa: E402
@@ -56,14 +61,14 @@ def _load_manifest() -> dict:
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {"urls": [], "synced_at": "", "version": 1}
+    return {"urls": [], "synced_at": "", "version": 2}
 
 
 def _save_manifest(urls: list[str]) -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     _manifest_path().write_text(
         json.dumps(
-            {"urls": sorted(set(urls)), "synced_at": _now_iso(), "version": 1},
+            {"urls": sorted(set(urls)), "synced_at": _now_iso(), "version": 2},
             indent=2,
         ),
         encoding="utf-8",
@@ -84,64 +89,22 @@ def _save_progress(progress: dict) -> None:
     PROGRESS_PATH.write_text(json.dumps(progress, indent=2), encoding="utf-8")
 
 
-def _cache_html(slug: str, html: str) -> Path:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    path = CACHE_DIR / f"{slug}.html"
-    path.write_text(html, encoding="utf-8")
-    return path
+def _slug_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if len(parts) >= 2 and parts[0] == "builds":
+        return parts[1]
+    raise ValueError(f"Invalid build URL: {url}")
 
 
-def _fetch(
-    url: str,
-    *,
-    slug: str = "",
-    fetcher: Callable[[str], requests.Response] | None = None,
-) -> str:
-    if slug:
-        cached = CACHE_DIR / f"{slug}.html"
-        if cached.exists():
-            return cached.read_text(encoding="utf-8")
-
-    if fetcher:
-        resp = fetcher(url)
-    else:
-        resp = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
-    html = resp.text
-    if slug:
-        _cache_html(slug, html)
-    return html
-
-
-def _extract_urls_from_html(html: str) -> list[str]:
-    urls: set[str] = set()
-    for match in BUILD_URL_RE.finditer(html):
-        slug = match.group(1)
-        urls.add(f"{BUILDORDERGUIDE_BASE}/builds/{slug}")
-
-    soup = BeautifulSoup(html, "html.parser")
-    next_data = soup.find("script", id="__NEXT_DATA__")
-    if next_data and next_data.string:
-        try:
-            data = json.loads(next_data.string)
-            props = data.get("props", {}).get("pageProps", {})
-            for key in ("builds", "items", "buildOrders", "results"):
-                items = props.get(key) or []
-                for item in items:
-                    if isinstance(item, str) and "/builds/" in item:
-                        urls.add(urljoin(BUILDORDERGUIDE_BASE, item))
-                    elif isinstance(item, dict):
-                        slug = item.get("slug") or item.get("id") or item.get("externalId")
-                        if slug:
-                            urls.add(f"{BUILDORDERGUIDE_BASE}/builds/{slug}")
-        except Exception as exc:
-            logger.debug("NEXT_DATA parse skipped: %s", exc)
-
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if "/builds/" in href:
-            urls.add(urljoin(BUILDORDERGUIDE_BASE, href))
-    return sorted(urls)
+def _load_cached_build(slug: str) -> dict | None:
+    path = CACHE_DIR / f"{slug}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 def discover_build_urls(
@@ -149,48 +112,14 @@ def discover_build_urls(
     fetcher: Callable[[str], requests.Response] | None = None,
     max_pages: int = 20,
 ) -> list[str]:
-    """Discover build URLs from sitemap, index pages, and civ listings."""
-    discovered: set[str] = set()
-    seeds = [
-        f"{BUILDORDERGUIDE_BASE}/sitemap.xml",
-        f"{BUILDORDERGUIDE_BASE}/builds",
-        BUILDORDERGUIDE_BASE,
-    ]
+    """Discover build URLs from Firestore published-builds collection."""
+    del fetcher, max_pages  # legacy params kept for tests
+    try:
+        urls = firestore_discover_urls()
+    except Exception as exc:
+        logger.warning("Firestore discovery failed: %s", exc)
+        urls = []
 
-    for seed in seeds:
-        try:
-            if fetcher:
-                html = fetcher(seed).text
-            else:
-                html = _fetch(seed)
-            for url in _extract_urls_from_html(html):
-                discovered.add(url)
-            if seed.endswith("sitemap.xml"):
-                for loc in re.findall(r"<loc>([^<]+)</loc>", html):
-                    if "/builds/" in loc:
-                        discovered.add(loc.strip())
-        except Exception as exc:
-            logger.warning("Discovery seed failed %s: %s", seed, exc)
-        if fetcher is None:
-            time.sleep(RATE_LIMIT_SEC)
-
-    for page in range(2, max_pages + 1):
-        page_url = f"{BUILDORDERGUIDE_BASE}/builds?page={page}"
-        try:
-            if fetcher:
-                html = fetcher(page_url).text
-            else:
-                html = _fetch(page_url)
-            page_urls = _extract_urls_from_html(html)
-            if not page_urls:
-                break
-            discovered.update(page_urls)
-        except Exception:
-            break
-        if fetcher is None:
-            time.sleep(RATE_LIMIT_SEC)
-
-    urls = sorted(discovered)
     _save_manifest(urls)
     logger.info("Discovered %d buildorderguide URLs", len(urls))
     return urls
@@ -202,24 +131,20 @@ def import_build_url(
     fetcher: Callable[[str], requests.Response] | None = None,
     enrich: bool = True,
 ) -> bool:
-    """Fetch, parse, enrich, and upsert one build order."""
-    parsed = urlparse(url)
-    parts = [p for p in parsed.path.strip("/").split("/") if p]
-    if len(parts) < 2 or parts[0] != "builds":
-        raise ValueError(f"Invalid build URL: {url}")
-    slug = parts[1]
+    """Fetch from Firestore, parse, enrich, and upsert one build order."""
+    del fetcher
+    slug = _slug_from_url(url)
+    cached = _load_cached_build(slug)
 
-    if fetcher:
-        html = fetcher(url).text
-    else:
-        html = _fetch(url, slug=slug, fetcher=fetcher)
-
-    _cache_html(slug, html)
-    repo_cache = ROOT / "data" / "buildorderguide_cache"
-    repo_cache.mkdir(parents=True, exist_ok=True)
-    (repo_cache / f"{slug}.html").write_text(html, encoding="utf-8")
-
-    bo = import_from_buildorderguide(url)
+    try:
+        if cached:
+            bo = build_order_from_bog_data(cached)
+        else:
+            data = fetch_published_build(slug)
+            cache_build_json(slug, data, CACHE_DIR)
+            bo = build_order_from_bog_data(data)
+    except Exception as exc:
+        raise RuntimeError(f"Firestore import failed for {slug}: {exc}") from exc
 
     if enrich and bo.steps:
         before = len(bo.steps)
@@ -238,12 +163,13 @@ def sync_all(
     fetcher: Callable[[str], requests.Response] | None = None,
 ) -> dict:
     """Sync discovered builds with resume support."""
+    del fetcher
     init_db()
     if urls is None:
         manifest = _load_manifest()
         urls = manifest.get("urls") or []
         if not urls or force:
-            urls = discover_build_urls(fetcher=fetcher)
+            urls = discover_build_urls()
 
     progress = _load_progress()
     done = set(progress.get("done") or [])
@@ -260,8 +186,9 @@ def sync_all(
     imported = 0
     errors = 0
     for i, url in enumerate(pending, start=1):
+        slug = _slug_from_url(url)
         try:
-            import_build_url(url, fetcher=fetcher, enrich=True)
+            import_build_url(url, enrich=True)
             done.add(url)
             failed.pop(url, None)
             imported += 1
@@ -272,17 +199,24 @@ def sync_all(
             logger.warning("Failed %s: %s", url, exc)
         progress = {"done": sorted(done), "failed": failed, "last_url": url}
         _save_progress(progress)
-        if fetcher is None:
-            time.sleep(RATE_LIMIT_SEC)
+        time.sleep(RATE_LIMIT_SEC)
 
     total = len(get_all_build_orders())
-    return {
+    result = {
         "imported": imported,
         "errors": errors,
         "total_builds": total,
         "pending": len(pending),
         "urls_discovered": len(urls),
     }
+    logger.info(
+        "Sync complete: discovered=%d imported=%d errors=%d total_in_db=%d",
+        len(urls),
+        imported,
+        errors,
+        total,
+    )
+    return result
 
 
 def needs_sync(*, min_builds: int = MIN_BUILDS_TARGET) -> bool:
